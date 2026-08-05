@@ -1,344 +1,489 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const GideonAssistenteApp());
 }
 
-class GideonAssistenteApp extends StatefulWidget {
+class GideonAssistenteApp extends StatelessWidget {
   const GideonAssistenteApp({super.key});
 
-  @override
-  State<GideonAssistenteApp> createState() => _GideonAssistenteAppState();
-}
-
-class _GideonAssistenteAppState extends State<GideonAssistenteApp> {
-  bool isDarkMode = true;
-
-  void toggleTheme() {
-    setState(() {
-      isDarkMode = !isDarkMode;
-    });
-  }
+  static const Color darkBg = Color(0xFF090A0F);
+  static const Color cardBg = Color(0xFF13151C);
+  static const Color cardBorder = Color(0xFF222634);
+  static const Color neonLime = Color(0xFFCCFF00);
+  static const Color subtext = Color(0xFF8E96A8);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Gideon • Assistente Virtual do Lar',
+      title: 'Gideon • Finanças & Assistente IA',
       debugShowCheckedModeBanner: false,
-      themeMode: isDarkMode ? ThemeMode.dark : ThemeMode.light,
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.light,
-        colorSchemeSeed: const Color(0xFF2563EB),
-        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
-      ),
+      themeMode: ThemeMode.dark,
       darkTheme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
-        colorSchemeSeed: const Color(0xFF2563EB),
-        scaffoldBackgroundColor: const Color(0xFF0F172A),
+        scaffoldBackgroundColor: darkBg,
+        colorScheme: const ColorScheme.dark(
+          surface: cardBg,
+          primary: neonLime,
+          onPrimary: Colors.black,
+          secondary: Color(0xFF38BDF8),
+        ),
+        fontFamily: 'Plus Jakarta Sans',
       ),
-      home: HomeScreen(
-        onToggleTheme: toggleTheme,
-        isDarkMode: isDarkMode,
-      ),
+      home: const HomeScreen(),
     );
   }
 }
 
 class HomeScreen extends StatefulWidget {
-  final VoidCallback onToggleTheme;
-  final bool isDarkMode;
-
-  const HomeScreen({
-    super.key,
-    required this.onToggleTheme,
-    required this.isDarkMode,
-  });
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Navegação Principal (0: Mudança, 1: Finanças, 2: Caixas & Inventário, 3: Contas, 4: Casal/Frete)
+  // Navegação Principal (0: Início, 1: Atividades, 2: Compras, 3: Contas, 4: Já Possuo)
   int _currentTab = 0;
 
-  // Estado da Mudança
-  double _saldoMudanca = 2500.00;
-  double _totalGastadoMudanca = 850.00;
-  final double _progressoMudanca = 0.45; // 45% concluído
+  // Estado Financeiro
+  double _saldoEmContas = 131.38;
+  double? _gastosMesManual;
+  bool _ocultarValores = false;
+  String _geminiApiKey = '';
 
-  // Estado de Finanças Pessoais
-  double _saldoDisponivel = 3200.00; // ESQUERDA (Saldo Disponível)
-  double _faturasGastos = 1450.00;   // DIREITA (Faturas & Dívidas / Gastos)
+  // Transações / Despesas Recentes
+  final List<Map<String, dynamic>> _despesas = [
+    {'desc': 'Transferência enviada', 'category': 'Apostas', 'amount': 10.00, 'date': 'Hoje', 'banco': 'Nubank', 'pago': true},
+    {'desc': 'Compra no débito via Nu', 'category': 'Serviços', 'amount': 11.30, 'date': 'Ontem', 'banco': 'Nubank', 'pago': true},
+    {'desc': 'Supermercado', 'category': 'Alimentação', 'amount': 26.68, 'date': 'Ontem', 'banco': 'Nubank', 'pago': true},
+  ];
 
-  // Listas de Contas Pessoais e Fixas
+  // Lista de Compras com Soma Automática
+  final List<Map<String, dynamic>> _listaCompras = [];
+
+  // Contas e Vencimentos
   final List<Map<String, dynamic>> _contasVencimento = [
-    {'id': 1, 'nome': 'Aluguel do Mês', 'valor': 1200.0, 'vencimento': '10/08/2026', 'paga': false, 'categoria': 'Moradia'},
-    {'id': 2, 'nome': 'Conta de Luz (ENEL)', 'valor': 185.50, 'vencimento': '15/08/2026', 'paga': false, 'categoria': 'Serviços'},
-    {'id': 3, 'nome': 'Internet Fibra 500MB', 'valor': 119.90, 'vencimento': '05/08/2026', 'paga': true, 'categoria': 'Serviços'},
+    {'nome': 'Aluguel do Mês', 'valor': 1200.0, 'vencimento': '10/08/2026', 'paga': false},
+    {'nome': 'Conta de Luz', 'valor': 185.50, 'vencimento': '15/08/2026', 'paga': false},
   ];
 
-  // Listas de Caixas e Inventário
-  final List<Map<String, dynamic>> _caixasMudanca = [
-    {
-      'codigo': 'CX-01',
-      'comodo': 'Cozinha',
-      'descricao': 'Pratos, Copos de Cristal e Taças',
-      'fragil': true,
-      'status': 'Embalado',
-      'itens': ['6 Pratos Rasos', '6 Taças de Vinho', 'Jogo de Copos']
-    },
-    {
-      'codigo': 'CX-02',
-      'comodo': 'Quarto Casal',
-      'descricao': 'Roupas de Cama e Edredom',
-      'fragil': false,
-      'status': 'Pronto para Transporte',
-      'itens': ['2 Edredons', '4 Jogos de Lençol', 'Travesseiros']
-    },
-    {
-      'codigo': 'CX-03',
-      'comodo': 'Sala',
-      'descricao': 'Eletrônicos e Modems',
-      'fragil': true,
-      'status': 'Aberto',
-      'itens': ['Roteador Wi-Fi', 'Controles Remotos', 'Fios e Cabos']
-    },
-  ];
+  // Objetos que Já Possuo
+  final List<String> _jaPossuo = ['Geladeira Frost Free', 'Máquina de Lavar', 'Smart TV 55"'];
 
-  final List<Map<String, dynamic>> _orcamentosFrete = [
-    {'empresa': 'TransMudanças VIP', 'valor': 1200.0, 'ajudantes': 3, 'montagem': true, 'seguro': true, 'recomendado': true},
-    {'empresa': 'Frete Rápido Express', 'valor': 750.0, 'ajudantes': 1, 'montagem': false, 'seguro': false, 'recomendado': false},
-    {'empresa': 'Mudanças & Cia', 'valor': 950.0, 'ajudantes': 2, 'montagem': true, 'seguro': false, 'recomendado': false},
-  ];
-
-  final List<Map<String, dynamic>> _garantiasEletros = [
-    {'item': 'Geladeira Frost Free 400L', 'loja': 'Magalu', 'garantia': '12 meses', 'vencimento': '10/12/2026', 'valor': 3200.0},
-    {'item': 'Máquina de Lavar 11kg', 'loja': 'Casas Bahia', 'garantia': '24 meses', 'vencimento': '15/05/2027', 'valor': 2100.0},
-    {'item': 'Smart TV 55" 4K', 'loja': 'Amazon', 'garantia': '12 meses', 'vencimento': '20/01/2027', 'valor': 2400.0},
-  ];
-
-  // Divisão de Casal / Roommates
-  final double _rendaPessoa1 = 4500.0;
-  final double _rendaPessoa2 = 2500.0;
-  final double _totalContasCasa = 2800.0;
-
-  // Controllers do Chat e Busca
-  final TextEditingController _chatController = TextEditingController();
-  final TextEditingController _buscaCaixaController = TextEditingController();
-  final ScrollController _scrollChatController = ScrollController();
-  String _filtroBuscaCaixa = '';
-
-  // Histórico de Mensagens do Chat com a Gideon
+  // Chat com a Gideon
   final List<Map<String, String>> _chatMsgs = [
-    {'autor': 'bot', 'texto': 'Olá! Sou a Gideon 🌐. Como posso te ajudar na mudança ou na gestão financeira hoje?'},
+    {'autor': 'bot', 'texto': 'Olá, Taylane! Sou a Gideon. Como posso te ajudar nas tuas finanças hoje?'},
   ];
+  final TextEditingController _chatController = TextEditingController();
+  final ScrollController _scrollChatController = ScrollController();
+  bool _isChatOverlayOpen = false;
+
+  // Controllers para Modais
+  final TextEditingController _editSaldoController = TextEditingController();
+  final TextEditingController _editGastadoController = TextEditingController();
+  final TextEditingController _apiKeyController = TextEditingController();
+  final TextEditingController _comprarNomeController = TextEditingController();
+  final TextEditingController _comprarValorController = TextEditingController();
+  final TextEditingController _contaNomeController = TextEditingController();
+  final TextEditingController _contaValorController = TextEditingController();
+  final TextEditingController _contaDataController = TextEditingController();
+  final TextEditingController _possuoController = TextEditingController();
+  final TextEditingController _ofxTextController = TextEditingController();
 
   @override
   void dispose() {
     _chatController.dispose();
-    _buscaCaixaController.dispose();
     _scrollChatController.dispose();
+    _editSaldoController.dispose();
+    _editGastadoController.dispose();
+    _apiKeyController.dispose();
+    _comprarNomeController.dispose();
+    _comprarValorController.dispose();
+    _contaNomeController.dispose();
+    _contaValorController.dispose();
+    _contaDataController.dispose();
+    _possuoController.dispose();
+    _ofxTextController.dispose();
     super.dispose();
   }
 
-  void _processUserMessage(String input) {
-    if (input.trim().isEmpty) return;
-    final text = input.trim();
-    final lower = text.toLowerCase();
-
-    double valor = 0.0;
-    final matchK = RegExp(r'(\d+([.,]\d+)?)\s*k').firstMatch(lower);
-    if (matchK != null) {
-      valor = (double.tryParse(matchK.group(1)!.replaceAll(',', '.')) ?? 0.0) * 1000.0;
-    } else {
-      final matchNum = RegExp(r'(\d+([.,]\d+)?)').firstMatch(lower);
-      if (matchNum != null) {
-        valor = double.tryParse(matchNum.group(1)!.replaceAll(',', '.')) ?? 0.0;
+  double get _totalCalculadoDespesas {
+    double sum = 0;
+    for (var d in _despesas) {
+      sum += (d['amount'] as num).toDouble();
+    }
+    for (var c in _listaCompras) {
+      if (c['comprado'] == true) {
+        sum += (c['valor'] as num).toDouble();
       }
     }
+    return sum;
+  }
 
-    setState(() {
-      _chatMsgs.add({'autor': 'user', 'texto': text});
-      _chatController.clear();
+  double get _gastosMesFinal => _gastosMesManual ?? _totalCalculadoDespesas;
 
-      if (lower.contains('recebi') || lower.contains('salário') || lower.contains('salario') || lower.contains('pix') || lower.contains('ganhei')) {
-        if (valor > 0) _saldoDisponivel += valor;
-        _chatMsgs.add({
-          'autor': 'bot',
-          'texto': '💰 Entrada de R\$ ${valor.toStringAsFixed(2)} adicionada ao seu Saldo Disponível!'
-        });
-      } else if (lower.contains('gastei') || lower.contains('comprei') || lower.contains('almoço') || lower.contains('ifood') || lower.contains('mercado') || lower.contains('paguei')) {
-        if (valor > 0) {
-          _faturasGastos += valor;     // Acumula no Card DIREITO (Faturas & Dívidas)
-          _saldoDisponivel -= valor;  // Abate do Card ESQUERDO (Saldo Disponível)
-        }
-        _chatMsgs.add({
-          'autor': 'bot',
-          'texto': '💸 Lançado R\$ ${valor.toStringAsFixed(2)} em Faturas & Dívidas (Card Direito)! Saldo atualizado.'
-        });
-      } else if (lower.contains('mudança') || lower.contains('frete') || lower.contains('caixa')) {
-        if (valor > 0) {
-          _totalGastadoMudanca += valor;
-          _saldoMudanca -= valor;
-        }
-        _chatMsgs.add({
-          'autor': 'bot',
-          'texto': '🚚 Lançamento de R\$ ${valor.toStringAsFixed(2)} associado ao orçamento da Mudança!'
-        });
-      } else {
-        _chatMsgs.add({
-          'autor': 'bot',
-          'texto': '🌐 Entendido! Registrei sua mensagem na central de controle.'
-        });
+  double get _totalComprasEstimado {
+    double sum = 0;
+    for (var c in _listaCompras) {
+      sum += (c['valor'] as num).toDouble();
+    }
+    return sum;
+  }
+
+  double get _totalComprasConcluidas {
+    double sum = 0;
+    for (var c in _listaCompras) {
+      if (c['comprado'] == true) {
+        sum += (c['valor'] as num).toDouble();
       }
-
-      Timer(const Duration(milliseconds: 100), () {
-        if (_scrollChatController.hasClients) {
-          _scrollChatController.animateTo(
-            _scrollChatController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
-    });
+    }
+    return sum;
   }
 
-  void _exportarRelatorio() {
-    double margemReserva = _totalGastadoMudanca * 0.15;
-    final String relatorio = '''
-📊 *RELATÓRIO COMPLETO GIDEON*
----------------------------------------------------
-🚚 *PLANEJAMENTO DE MUDANÇA:*
-• Saldo Reservado: R\$ ${_saldoMudanca.toStringAsFixed(2)}
-• Gastos Acumulados: R\$ ${_totalGastadoMudanca.toStringAsFixed(2)}
-• Margem de Imprevistos (+15%): R\$ ${margemReserva.toStringAsFixed(2)}
-• Progresso de Embalagem: ${(_progressoMudanca * 100).toStringAsFixed(0)}%
-
-💰 *FINANÇAS PESSOAIS:*
-• Saldo Disponível (Livre): R\$ ${_saldoDisponivel.toStringAsFixed(2)}
-• Faturas & Dívidas (Gastos): R\$ ${_faturasGastos.toStringAsFixed(2)}
-
-📦 *ORGANIZAÇÃO DE CAIXAS:*
-• Total de Caixas Cadastradas: ${_caixasMudanca.length}
----------------------------------------------------
-Gerado por Gideon • Assistente Virtual 🌐
-''';
-
-    Clipboard.setData(ClipboardData(text: relatorio));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('📋 Relatório copiado com sucesso! Prontinho para colar no WhatsApp.'),
-        backgroundColor: Color(0xFF10B981),
-      ),
-    );
-  }
-
-  void _darBaixaConta(int id) {
-    setState(() {
-      for (var c in _contasVencimento) {
-        if ((c['id'] as num).toInt() == id) {
-          bool estaPaga = c['paga'] == true;
-          c['paga'] = !estaPaga;
-          double valorConta = (c['valor'] as num).toDouble();
-          if (c['paga'] == true) {
-            _faturasGastos += valorConta;
-            _saldoDisponivel -= valorConta;
-          } else {
-            _faturasGastos -= valorConta;
-            _saldoDisponivel += valorConta;
-          }
-        }
-      }
-    });
-  }
-
-  Card _buildCustomCard({required Widget child, Color? color, bool isDark = true}) {
-    return Card(
-      elevation: 0,
-      color: color ?? (isDark ? const Color(0xFF1E293B) : Colors.white),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+  Widget _buildPierreCard({
+    required Widget child,
+    EdgeInsetsGeometry padding = const EdgeInsets.all(16),
+    VoidCallback? onTap,
+    Color? borderColor,
+  }) {
+    final cardWidget = Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: GideonAssistenteApp.cardBg,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: borderColor ?? Colors.white.withOpacity(0.08),
           width: 1,
         ),
       ),
       child: child,
     );
+
+    if (onTap != null) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: cardWidget,
+      );
+    }
+    return cardWidget;
+  }
+
+  String _formatMoney(double val) {
+    if (_ocultarValores) return '••••••';
+    return 'R\$ ${val.toStringAsFixed(2).replaceAll('.', ',')}';
+  }
+
+  void _processarMensagemUser(String input) {
+    if (input.trim().isEmpty) return;
+    final text = input.trim();
+
+    setState(() {
+      _chatMsgs.add({'autor': 'user', 'texto': text});
+      _chatController.clear();
+    });
+
+    final lower = text.toLowerCase();
+    
+    // RegEx Saldo
+    final matchSaldo = RegExp(r'(?:saldo\s+(?:é|e)|saldo\s+de)\s*R?\$?\s*([\d\.,]+)', caseSensitive: false).firstMatch(lower);
+    if (matchSaldo != null) {
+      final valStr = matchSaldo.group(1)!.replaceAll('.', '').replaceAll(',', '.');
+      final val = double.tryParse(valStr) ?? 0.0;
+      setState(() {
+        _saldoEmContas = val;
+        _chatMsgs.add({'autor': 'bot', 'texto': '✅ Saldo em contas ajustado para R\$ ${val.toStringAsFixed(2)}!'});
+      });
+      _scrollToBottomChat();
+      return;
+    }
+
+    // RegEx Gastei
+    final matchGasto = RegExp(r'(?:gastei|paguei)\s*R?\$?\s*([\d\.,]+)\s*(?:com|no|na|em)?\s*(.*)', caseSensitive: false).firstMatch(lower);
+    if (matchGasto != null) {
+      final valStr = matchGasto.group(1)!.replaceAll('.', '').replaceAll(',', '.');
+      final val = double.tryParse(valStr) ?? 0.0;
+      final desc = matchGasto.group(2)?.trim().isNotEmpty == true ? matchGasto.group(2)!.trim() : 'Gasto Rápido';
+      setState(() {
+        _despesas.insert(0, {
+          'desc': desc,
+          'category': 'Geral',
+          'amount': val,
+          'date': 'Hoje',
+          'banco': 'Nubank',
+          'pago': true,
+        });
+        _chatMsgs.add({'autor': 'bot', 'texto': '💸 Lançado R\$ ${val.toStringAsFixed(2)} em "$desc"!'});
+      });
+      _scrollToBottomChat();
+      return;
+    }
+
+    if (_geminiApiKey.isNotEmpty) {
+      _chamarGeminiAPI(text);
+    } else {
+      setState(() {
+        _chatMsgs.add({'autor': 'bot', 'texto': '🌐 Registrado localmente! Para respostas com inteligência artificial completa ou análise de fotos, adicione sua chave API no topo.'});
+      });
+      _scrollToBottomChat();
+    }
+  }
+
+  Future<void> _chamarGeminiAPI(String prompt) async {
+    setState(() {
+      _chatMsgs.add({'autor': 'bot', 'texto': '⏳ Gideon está analisando...'});
+    });
+    _scrollToBottomChat();
+
+    try {
+      final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=$_geminiApiKey');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'contents': [
+            {
+              'parts': [{'text': prompt}]
+            }
+          ],
+          'systemInstruction': {
+            'parts': [{'text': 'Você é a Gideon, assistente financeira pessoal estilo Pierre. Responda de forma simples, elegante e direta em português.'}]
+          }
+        }),
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body) as Map<String, dynamic>;
+        String replyText = 'Sem resposta da IA.';
+        if (data.containsKey('candidates') && data['candidates'] is List && (data['candidates'] as List).isNotEmpty) {
+          final cand = data['candidates'][0];
+          if (cand is Map && cand.containsKey('content') && cand['content'] is Map) {
+            final content = cand['content'] as Map;
+            if (content.containsKey('parts') && content['parts'] is List && (content['parts'] as List).isNotEmpty) {
+              final part = content['parts'][0];
+              if (part is Map && part.containsKey('text')) {
+                replyText = part['text'].toString();
+              }
+            }
+          }
+        }
+        setState(() {
+          _chatMsgs.removeLast();
+          _chatMsgs.add({'autor': 'bot', 'texto': replyText});
+        });
+      } else {
+        setState(() {
+          _chatMsgs.removeLast();
+          _chatMsgs.add({'autor': 'bot', 'texto': '⚠️ Não foi possível conectar ao Gemini. Verifique sua chave API.'});
+        });
+      }
+    } catch (_) {
+      setState(() {
+        _chatMsgs.removeLast();
+        _chatMsgs.add({'autor': 'bot', 'texto': '⚠️ Erro ao consultar a IA.'});
+      });
+    }
+    _scrollToBottomChat();
+  }
+
+  void _scrollToBottomChat() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollChatController.hasClients) {
+        _scrollChatController.animateTo(
+          _scrollChatController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = widget.isDarkMode;
-
     return Scaffold(
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
-        child: Center(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 900),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Column(
               children: [
-                // Header Principal
-                _buildCustomCard(
-                  isDark: isDark,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
+                // Top Header
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E293B),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.white.withOpacity(0.1)),
+                            ),
+                            child: const Center(
+                              child: Icon(Icons.smart_toy, color: GideonAssistenteApp.neonLime, size: 24),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Taylane',
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.extrabold, color: Colors.white),
+                              ),
+                              Text(
+                                'Assistente Pessoal & Finanças',
+                                style: TextStyle(fontSize: 11, color: GideonAssistenteApp.subtext, fontWeight: FontWeight.w500),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          IconButton(
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.white.withOpacity(0.05),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                side: BorderSide(color: Colors.white.withOpacity(0.1)),
+                              ),
+                            ),
+                            icon: const Icon(Icons.vpn_key_outlined, color: GideonAssistenteApp.neonLime, size: 18),
+                            onPressed: _abrirModalChaveApi,
+                            tooltip: 'Configurar Chave API',
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.white.withOpacity(0.05),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                side: BorderSide(color: Colors.white.withOpacity(0.1)),
+                              ),
+                            ),
+                            icon: Icon(
+                              _ocultarValores ? Icons.visibility_off : Icons.visibility,
+                              color: _ocultarValores ? const Color(0xFFFB7185) : Colors.white70,
+                              size: 18,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _ocultarValores = !_ocultarValores;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Nav Pills
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Row(
+                    children: [
+                      _buildNavPill(0, 'Início', Icons.pie_chart_outline),
+                      const SizedBox(width: 8),
+                      _buildNavPill(1, 'Atividades', Icons.list_alt),
+                      const SizedBox(width: 8),
+                      _buildNavPill(2, 'Compras', Icons.shopping_cart_outlined),
+                      const SizedBox(width: 8),
+                      _buildNavPill(3, 'Contas', Icons.calendar_today_outlined),
+                      const SizedBox(width: 8),
+                      _buildNavPill(4, 'Já Possuo', Icons.inventory_2_outlined),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Active Tab Content
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Center(
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 500),
+                        child: Column(
+                          children: [
+                            if (_currentTab == 0) _buildTabDashboard(),
+                            if (_currentTab == 1) _buildTabAtividades(),
+                            if (_currentTab == 2) _buildTabCompras(),
+                            if (_currentTab == 3) _buildTabContas(),
+                            if (_currentTab == 4) _buildTabPossuo(),
+                            const SizedBox(height: 100),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            // Floating Bottom Bar "Pergunte à Gideon..."
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 16,
+              child: Center(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 500),
+                  child: _buildPierreCard(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    borderColor: Colors.white.withOpacity(0.12),
+                    onTap: () {
+                      setState(() {
+                        _isChatOverlayOpen = true;
+                      });
+                    },
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Row(
                           children: [
-                            Text('🌐 ', style: TextStyle(fontSize: 22)),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Gideon App',
-                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                                ),
-                                Text(
-                                  'Assistente Virtual do Lar & Finanças',
-                                  style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-                                ),
-                              ],
+                            Container(
+                              padding: EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Color(0x22CCFF00),
+                                borderRadius: BorderRadius.all(Radius.circular(12)),
+                              ),
+                              child: Icon(Icons.qr_code_scanner, color: GideonAssistenteApp.neonLime, size: 16),
+                            ),
+                            SizedBox(width: 10),
+                            Text(
+                              'Pergunte à Gideon...',
+                              style: TextStyle(fontSize: 13, color: GideonAssistenteApp.subtext, fontWeight: FontWeight.w500),
                             ),
                           ],
                         ),
                         Row(
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.share_outlined),
-                              tooltip: 'Exportar Relatório',
-                              onPressed: _exportarRelatorio,
+                              icon: const Icon(Icons.camera_alt_outlined, color: Colors.white70, size: 18),
+                              onPressed: _simularLeituraPrint,
+                              tooltip: 'Ler Print de PIX',
                             ),
-                            const SizedBox(width: 4),
-                            InkWell(
-                              onTap: widget.onToggleTheme,
-                              borderRadius: BorderRadius.circular(20),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  isDark ? '☀️ Tema' : '🌙 Tema',
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white : Colors.black87,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                ),
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: GideonAssistenteApp.neonLime,
+                                borderRadius: BorderRadius.circular(12),
                               ),
+                              child: const Icon(Icons.arrow_upward, color: Colors.black, size: 16),
                             ),
                           ],
                         ),
@@ -346,131 +491,162 @@ Gerado por Gideon • Assistente Virtual 🌐
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildNavButton(0, '🚚 Mudança', isDark),
-                      const SizedBox(width: 8),
-                      _buildNavButton(1, '💰 Finanças', isDark),
-                      const SizedBox(width: 8),
-                      _buildNavButton(2, '📦 Caixas & QR', isDark),
-                      const SizedBox(width: 8),
-                      _buildNavButton(3, '📅 Contas', isDark),
-                      const SizedBox(width: 8),
-                      _buildNavButton(4, '🤝 Casal & Frete', isDark),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Renderiza a aba ativa
-                if (_currentTab == 0) _buildTabMudanca(isDark),
-                if (_currentTab == 1) _buildTabFinancas(isDark),
-                if (_currentTab == 2) _buildTabCaixas(isDark),
-                if (_currentTab == 3) _buildTabContas(isDark),
-                if (_currentTab == 4) _buildTabCasalEFrete(isDark),
-
-                const SizedBox(height: 16),
-
-                // Chat da Gideon Inteligente (Fixo na parte inferior)
-                _buildChatGideon(isDark),
-              ],
+              ),
             ),
-          ),
+
+            if (_isChatOverlayOpen) _buildChatOverlayModal(),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildNavButton(int index, String label, bool isDark) {
+  Widget _buildNavPill(int index, String label, IconData icon) {
     final isSelected = _currentTab == index;
-    return ElevatedButton(
+    return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        backgroundColor: isSelected ? const Color(0xFF2563EB) : (isDark ? const Color(0xFF1E293B) : Colors.white),
-        foregroundColor: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: isSelected ? 2 : 0,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        backgroundColor: isSelected ? GideonAssistenteApp.neonLime : Colors.white.withOpacity(0.05),
+        foregroundColor: isSelected ? Colors.black : Colors.white70,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 0,
       ),
+      icon: Icon(icon, size: 14),
+      label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
       onPressed: () => setState(() => _currentTab = index),
-      child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
     );
   }
 
-  Widget _buildTabMudanca(bool isDark) {
-    double fundoReserva = _totalGastadoMudanca * 0.15;
+  Widget _buildTabDashboard() {
+    final imprevisto = _gastosMesFinal * 0.15;
 
     return Column(
       children: [
-        _buildCustomCard(
-          isDark: isDark,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Row(
+          children: [
+            Expanded(
+              child: _buildPierreCard(
+                onTap: _abrirModalEditarSaldo,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('📦 Progresso Geral da Mudança', style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text('${(_progressoMudanca * 100).toStringAsFixed(0)}%', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            _buildMiniIconBadge('nu', const Color(0xFF9333EA)),
+                            _buildMiniIconBadge('bb', const Color(0xFFFBBF24)),
+                            _buildMiniIconBadge('it', const Color(0xFF2563EB)),
+                          ],
+                        ),
+                        const Icon(Icons.chevron_right, size: 14, color: GideonAssistenteApp.subtext),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    const Text('Saldo em contas', style: TextStyle(fontSize: 11, color: GideonAssistenteApp.subtext)),
+                    Text(
+                      _formatMoney(_saldoEmContas),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    const Text('3 contas conectadas', style: TextStyle(fontSize: 9, color: GideonAssistenteApp.subtext)),
                   ],
                 ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(5),
-                  child: LinearProgressIndicator(
-                    value: _progressoMudanca,
-                    backgroundColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                    color: const Color(0xFF2563EB),
-                    minHeight: 10.0,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildPierreCard(
+                onTap: _abrirModalEditarGastado,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(width: 8, height: 16, color: GideonAssistenteApp.neonLime),
+                          const SizedBox(width: 2),
+                          Container(width: 8, height: 24, color: GideonAssistenteApp.neonLime),
+                          const SizedBox(width: 2),
+                          Container(width: 8, height: 12, color: GideonAssistenteApp.neonLime.withOpacity(0.4)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Gastos do mês', style: TextStyle(fontSize: 11, color: GideonAssistenteApp.subtext)),
+                    Text(
+                      _formatMoney(_gastosMesFinal),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    Text('${_despesas.length} despesas lançadas', style: const TextStyle(fontSize: 9, color: GideonAssistenteApp.subtext)),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
 
         Row(
           children: [
             Expanded(
-              child: _buildCustomCard(
-                isDark: isDark,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    children: [
-                      const Text('Saldo Reservado', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-                      const SizedBox(height: 4),
-                      Text(
-                        'R\$ ${_saldoMudanca.toStringAsFixed(2)}',
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
-                      ),
-                    ],
-                  ),
+              child: _buildPierreCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.credit_card, size: 14, color: Color(0xFFFBBF24)),
+                            SizedBox(width: 4),
+                            Text('•••• 9694', style: TextStyle(fontSize: 10, color: GideonAssistenteApp.subtext)),
+                          ],
+                        ),
+                        Icon(Icons.chevron_right, size: 14, color: GideonAssistenteApp.subtext),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    const Text('Fatura Atual', style: TextStyle(fontSize: 11, color: GideonAssistenteApp.subtext)),
+                    Text(
+                      _formatMoney(_gastosMesFinal * 1.2),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    const Text('Vence em breve', style: TextStyle(fontSize: 9, color: Color(0xFFFBBF24), fontWeight: FontWeight.bold)),
+                  ],
                 ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _buildCustomCard(
-                isDark: isDark,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    children: [
-                      const Text('Total Gastado', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-                      const SizedBox(height: 4),
-                      Text(
-                        'R\$ ${_totalGastadoMudanca.toStringAsFixed(2)}',
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFEF4444)),
+              child: _buildPierreCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Fluxo de caixa', style: TextStyle(fontSize: 11, color: GideonAssistenteApp.subtext)),
+                        Icon(Icons.show_chart, size: 14, color: GideonAssistenteApp.neonLime),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text('+R\$ 0,00', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF34D399))),
+                    Text('-${_formatMoney(_gastosMesFinal)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFFB7185))),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: const LinearProgressIndicator(
+                        value: 0.25,
+                        backgroundColor: Colors.white10,
+                        color: Color(0xFFFB7185),
+                        minHeight: 4,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -478,184 +654,182 @@ Gerado por Gideon • Assistente Virtual 🌐
         ),
         const SizedBox(height: 12),
 
-        _buildCustomCard(
-          isDark: isDark,
-          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFFEF3C7),
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Row(
-              children: [
-                const Text('💡 ', style: TextStyle(fontSize: 18)),
-                Expanded(
-                  child: Text(
-                    'Fundo de Imprevistos Recomendado (+15%): R\$ ${fundoReserva.toStringAsFixed(2)} para custos ocultos.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
-                    ),
-                  ),
+        // Fundo de Imprevistos (+15%)
+        _buildPierreCard(
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: GideonAssistenteApp.neonLime, width: 3),
                 ),
-              ],
-            ),
+                child: const Center(
+                  child: Text('15%', style: TextStyle(fontSize: 10, fontWeight: FontWeight.extrabold, color: GideonAssistenteApp.neonLime)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Fundo de Imprevistos Recomendado', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                    Text(
+                      'Reserva de ${_formatMoney(imprevisto)} sugerida para custos ocultos.',
+                      style: const TextStyle(fontSize: 11, color: GideonAssistenteApp.subtext),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Transações Recentes
+        _buildPierreCard(
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Text('Transações Recentes', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(10)),
+                        child: Text('${_despesas.length}', style: const TextStyle(fontSize: 10, color: Colors.white)),
+                      ),
+                    ],
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _currentTab = 1),
+                    child: const Text('Ver todas', style: TextStyle(color: GideonAssistenteApp.neonLime, fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ..._despesas.take(3).map((d) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        _buildMiniIconBadge('nu', const Color(0xFF9333EA)),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(d['desc'].toString(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                            Text('${d['date']} • ${d['category']}', style: const TextStyle(fontSize: 10, color: GideonAssistenteApp.subtext)),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '-${_formatMoney((d['amount'] as num).toDouble())}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFFB7185)),
+                    ),
+                  ],
+                ),
+              )),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _buildTabFinancas(bool isDark) {
-    return _buildCustomCard(
-      isDark: isDark,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Text('💳 ', style: TextStyle(fontSize: 18)),
-                Text('Balanço Geral das Finanças', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
-                    ),
-                    child: Column(
-                      children: [
-                        const Text('Saldo Disponível (Livre)', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-                        const SizedBox(height: 6),
-                        Text(
-                          'R\$ ${_saldoDisponivel.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: _saldoDisponivel >= 0 ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
-                    ),
-                    child: Column(
-                      children: [
-                        const Text('Faturas & Dívidas (Gastos)', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-                        const SizedBox(height: 6),
-                        Text(
-                          'R\$ ${_faturasGastos.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFEF4444),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+  Widget _buildMiniIconBadge(String text, Color color) {
+    return Container(
+      width: 22,
+      height: 22,
+      margin: const EdgeInsets.only(right: 2),
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: GideonAssistenteApp.darkBg, width: 1.5),
+      ),
+      child: Center(
+        child: Text(text, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white)),
       ),
     );
   }
 
-  Widget _buildTabCaixas(bool isDark) {
-    final caixasFiltradas = _caixasMudanca.where((c) {
-      if (_filtroBuscaCaixa.isEmpty) return true;
-      final q = _filtroBuscaCaixa.toLowerCase();
-      final List itemsList = (c['itens'] as List);
-      final itemsStr = itemsList.map((e) => e.toString()).join(' ').toLowerCase();
-      return c['codigo'].toString().toLowerCase().contains(q) ||
-          c['comodo'].toString().toLowerCase().contains(q) ||
-          c['descricao'].toString().toLowerCase().contains(q) ||
-          itemsStr.contains(q);
-    }).toList();
-
+  Widget _buildTabAtividades() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TextField(
-          controller: _buscaCaixaController,
-          decoration: InputDecoration(
-            hintText: '🔍 Buscar por item (ex: taças, edredom, cabo)...',
-            prefixIcon: const Icon(Icons.search),
-            filled: true,
-            fillColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        const Text('Atividades', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+        const SizedBox(height: 12),
+
+        _buildPierreCard(
+          borderColor: const Color(0xFF34D399).withOpacity(0.3),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: const Color(0x2234D399),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.file_present, color: Color(0xFF34D399), size: 18),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Importar Extrato Bancário', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                    Text('Ficheiros .OFX ou .CSV do seu banco', style: TextStyle(fontSize: 10, color: GideonAssistenteApp.subtext)),
+                  ],
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0x2234D399),
+                  foregroundColor: const Color(0xFF34D399),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+                onPressed: _abrirModalImportarOFX,
+                child: const Text('Carregar', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              ),
+            ],
           ),
-          onChanged: (val) => setState(() => _filtroBuscaCaixa = val),
         ),
         const SizedBox(height: 12),
 
-        ...caixasFiltradas.map((cx) => Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: _buildCustomCard(
-            isDark: isDark,
-            child: Padding(
-              padding: const EdgeInsets.all(14.0),
-              child: Row(
-                children: [
-                  Container(
-                    width: 55,
-                    height: 55,
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1)),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.qr_code_2, size: 28, color: Color(0xFF2563EB)),
-                        Text(cx['codigo'].toString(), style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
+        ..._despesas.map((d) => Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: _buildPierreCard(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.shopping_bag_outlined, size: 18, color: GideonAssistenteApp.subtext),
+                    const SizedBox(width: 12),
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Text(cx['comodo'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                            if (cx['fragil'] == true) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(4)),
-                                child: const Text('⚠️ FRÁGIL', style: TextStyle(color: Color(0xFFDC2626), fontSize: 10, fontWeight: FontWeight.bold)),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(cx['descricao'].toString(), style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-                        const SizedBox(height: 4),
-                        Text('Itens: ${(cx['itens'] as List).map((e) => e.toString()).join(', ')}', style: const TextStyle(fontSize: 11)),
+                        Text(d['desc'].toString(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                        Text('${d['date']} • ${d['category']}', style: const TextStyle(fontSize: 10, color: GideonAssistenteApp.subtext)),
                       ],
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+                Text(
+                  '-${_formatMoney((d['amount'] as num).toDouble())}',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFFB7185)),
+                ),
+              ],
             ),
           ),
         )),
@@ -663,264 +837,518 @@ Gerado por Gideon • Assistente Virtual 🌐
     );
   }
 
-  Widget _buildTabContas(bool isDark) {
+  Widget _buildTabCompras() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildCustomCard(
-          isDark: isDark,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('📅 Contas & Vencimentos do Mês', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 12),
-                ..._contasVencimento.map((c) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(
-                    backgroundColor: c['paga'] == true ? const Color(0xFFD1FAE5) : const Color(0xFFFEE2E2),
-                    child: Icon(
-                      c['paga'] == true ? Icons.check : Icons.priority_high,
-                      color: c['paga'] == true ? const Color(0xFF059669) : const Color(0xFFDC2626),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Lista de Compras', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+            TextButton(
+              onPressed: () => setState(() => _listaCompras.clear()),
+              child: const Text('Limpar tudo', style: TextStyle(color: Color(0xFFFB7185), fontSize: 11)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        Row(
+          children: [
+            Expanded(
+              child: _buildPierreCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Total Estimado', style: TextStyle(fontSize: 11, color: GideonAssistenteApp.subtext)),
+                    const SizedBox(height: 4),
+                    Text(_formatMoney(_totalComprasEstimado), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: GideonAssistenteApp.neonLime)),
+                    Text('${_listaCompras.length} itens', style: const TextStyle(fontSize: 9, color: GideonAssistenteApp.subtext)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildPierreCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Já Comprado', style: TextStyle(fontSize: 11, color: GideonAssistenteApp.subtext)),
+                    const SizedBox(height: 4),
+                    Text(_formatMoney(_totalComprasConcluidas), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF34D399))),
+                    Text('${_listaCompras.where((c) => c['comprado'] == true).length} concluídos', style: const TextStyle(fontSize: 9, color: GideonAssistenteApp.subtext)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        _buildPierreCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Novo Item para a Lista', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: _comprarNomeController,
+                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Ex: Cama Casal',
+                        hintStyle: const TextStyle(color: GideonAssistenteApp.subtext),
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.05),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
                     ),
                   ),
-                  title: Text(c['nome'].toString(), style: TextStyle(decoration: c['paga'] == true ? TextDecoration.lineThrough : null)),
-                  subtitle: Text('Vence: ${c['vencimento']} | Categoria: ${c['categoria']}'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'R\$ ${(c['valor'] as num).toDouble().toStringAsFixed(2)}',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _comprarValorController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Valor (R\$)',
+                        hintStyle: const TextStyle(color: GideonAssistenteApp.subtext),
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.05),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: Icon(c['paga'] == true ? Icons.undo : Icons.check_circle_outline),
-                        color: c['paga'] == true ? Colors.grey : const Color(0xFF10B981),
-                        tooltip: c['paga'] == true ? 'Desfazer' : 'Dar Baixa (Paga)',
-                        onPressed: () => _darBaixaConta((c['id'] as num).toInt()),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: GideonAssistenteApp.neonLime,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () {
+                    final nome = _comprarNomeController.text.trim();
+                    final valor = double.tryParse(_comprarValorController.text.replaceAll(',', '.')) ?? 0.0;
+                    if (nome.isNotEmpty) {
+                      setState(() {
+                        _listaCompras.add({'nome': nome, 'valor': valor, 'comprado': false});
+                        _comprarNomeController.clear();
+                        _comprarValorController.clear();
+                      });
+                    }
+                  },
+                  child: const Text('Adicionar à Lista', style: TextStyle(fontWeight: FontWeight.extrabold, fontSize: 12)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        ..._listaCompras.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final item = entry.value;
+          final bool comprado = item['comprado'] == true;
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: _buildPierreCard(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: comprado,
+                        activeColor: GideonAssistenteApp.neonLime,
+                        checkColor: Colors.black,
+                        onChanged: (val) {
+                          setState(() {
+                            item['comprado'] = val == true;
+                          });
+                        },
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item['nome'].toString(),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              decoration: comprado ? TextDecoration.lineThrough : null,
+                            ),
+                          ),
+                          Text('Est: ${_formatMoney((item['valor'] as num).toDouble())}', style: const TextStyle(fontSize: 10, color: GideonAssistenteApp.subtext)),
+                        ],
                       ),
                     ],
                   ),
-                )),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTabCasalEFrete(bool isDark) {
-    double totalRenda = _rendaPessoa1 + _rendaPessoa2;
-    double percP1 = totalRenda > 0 ? (_rendaPessoa1 / totalRenda) : 0.5;
-    double percP2 = totalRenda > 0 ? (_rendaPessoa2 / totalRenda) : 0.5;
-
-    return Column(
-      children: [
-        _buildCustomCard(
-          isDark: isDark,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Text('🤝 ', style: TextStyle(fontSize: 18)),
-                    Text('Divisão Proporcional de Contas (Casal)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text('Contas Totais da Casa: R\$ ${_totalContasCasa.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8))),
-                const Divider(),
-                ListTile(
-                  title: const Text('Pessoa 1 (R\$ 4.500)'),
-                  subtitle: Text('${(percP1 * 100).toStringAsFixed(0)}% da renda familiar'),
-                  trailing: Text('Paga R\$ ${(_totalContasCasa * percP1).toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
-                ),
-                ListTile(
-                  title: const Text('Pessoa 2 (R\$ 2.500)'),
-                  subtitle: Text('${(percP2 * 100).toStringAsFixed(0)}% da renda familiar'),
-                  trailing: Text('Paga R\$ ${(_totalContasCasa * percP2).toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF10B981))),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        _buildCustomCard(
-          isDark: isDark,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Text('🚚 ', style: TextStyle(fontSize: 18)),
-                    Text('Comparador de Orçamentos de Frete', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                ..._orcamentosFrete.map((f) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('${f['empresa']} - R\$ ${(f['valor'] as num).toDouble().toStringAsFixed(2)}'),
-                  subtitle: Text('Ajudantes: ${f['ajudantes']} | Montagem: ${f['montagem'] == true ? "Sim" : "Não"}'),
-                  trailing: f['recomendado'] == true
-                      ? Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(color: const Color(0xFF10B981), borderRadius: BorderRadius.circular(12)),
-                          child: const Text('Melhor Opção', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
-                        )
-                      : null,
-                )),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        _buildCustomCard(
-          isDark: isDark,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Text('🏷️ ', style: TextStyle(fontSize: 18)),
-                    Text('Controle de Garantias de Eletros', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                ..._garantiasEletros.map((g) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(g['item'].toString()),
-                  subtitle: Text('Loja: ${g['loja']} | Prazo: ${g['garantia']}'),
-                  trailing: Text('Vence: ${g['vencimento']}', style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
-                )),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildChatGideon(bool isDark) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF10B981), width: 1.5),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Text('🤖 ', style: TextStyle(fontSize: 18)),
-                Text(
-                  'Fale com a Gideon (Assistente IA)',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            Container(
-              height: 220,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
-              ),
-              child: ListView.builder(
-                controller: _scrollChatController,
-                itemCount: _chatMsgs.length,
-                itemBuilder: (context, index) {
-                  final msg = _chatMsgs[index];
-                  final isUser = msg['autor'] == 'user';
-
-                  return Align(
-                    alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      constraints: const BoxConstraints(maxWidth: 340),
-                      decoration: BoxDecoration(
-                        color: isUser
-                            ? const Color(0xFF2563EB)
-                            : (isDark ? const Color(0xFF1E293B) : Colors.white),
-                        borderRadius: BorderRadius.only(
-                          topLeft: const Radius.circular(12),
-                          topRight: const Radius.circular(12),
-                          bottomLeft: Radius.circular(isUser ? 12.0 : 2.0),
-                          bottomRight: Radius.circular(isUser ? 2.0 : 12.0),
-                        ),
-                        border: isUser
-                            ? null
-                            : Border.all(color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1)),
-                      ),
-                      child: Text(
-                        msg['texto'] ?? '',
-                        style: TextStyle(
-                          color: isUser ? Colors.white : (isDark ? Colors.white : Colors.black87),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _buildQuickPill('💵 Recebi 1500 do PIX', () => _processUserMessage('Recebi 1500 do PIX'), isDark),
-                  const SizedBox(width: 8),
-                  _buildQuickPill('🍔 Gastei 25 no almoço', () => _processUserMessage('Gastei 25 no almoço'), isDark),
-                  const SizedBox(width: 8),
-                  _buildQuickPill('🚚 Paguei 400 no frete', () => _processUserMessage('Paguei 400 no frete'), isDark),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 16, color: GideonAssistenteApp.subtext),
+                    onPressed: () => setState(() => _listaCompras.removeAt(idx)),
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+          );
+        }),
+      ],
+    );
+  }
 
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _chatController,
-                    decoration: InputDecoration(
-                      hintText: 'Ex: Recebi 2000 ou gastei 50 no mercado...',
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+  Widget _buildTabContas() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Contas & Vencimentos', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+        const SizedBox(height: 12),
+
+        _buildPierreCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Agendar Conta', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _contaNomeController,
+                style: const TextStyle(fontSize: 12, color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Descrição (ex: Luz, Aluguel)',
+                  hintStyle: const TextStyle(color: GideonAssistenteApp.subtext),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.05),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _contaValorController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Valor (R\$)',
+                        hintStyle: const TextStyle(color: GideonAssistenteApp.subtext),
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.05),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
                     ),
-                    onSubmitted: _processUserMessage,
                   ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _contaDataController,
+                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Data (10/08)',
+                        hintStyle: const TextStyle(color: GideonAssistenteApp.subtext),
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.05),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF10B981),
+                    backgroundColor: Colors.white12,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: () => _processUserMessage(_chatController.text),
-                  child: const Text('Enviar', style: TextStyle(fontWeight: FontWeight.bold)),
+                  onPressed: () {
+                    final nome = _contaNomeController.text.trim();
+                    final valor = double.tryParse(_contaValorController.text.replaceAll(',', '.')) ?? 0.0;
+                    final data = _contaDataController.text.trim();
+                    if (nome.isNotEmpty) {
+                      setState(() {
+                        _contasVencimento.add({'nome': nome, 'valor': valor, 'vencimento': data, 'paga': false});
+                        _contaNomeController.clear();
+                        _contaValorController.clear();
+                        _contaDataController.clear();
+                      });
+                    }
+                  },
+                  child: const Text('Salvar Agendamento', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                 ),
-              ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        ..._contasVencimento.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final c = entry.value;
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: _buildPierreCard(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(c['nome'].toString(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                      Text('Vence: ${c['vencimento']}', style: const TextStyle(fontSize: 10, color: GideonAssistenteApp.subtext)),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Text(_formatMoney((c['valor'] as num).toDouble()), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFFB7185))),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 16, color: GideonAssistenteApp.subtext),
+                        onPressed: () => setState(() => _contasVencimento.removeAt(idx)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildTabPossuo() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Objetos & Móveis (Já Possuo)', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+        const SizedBox(height: 12),
+
+        _buildPierreCard(
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _possuoController,
+                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Ex: Geladeira, Sofá',
+                        hintStyle: const TextStyle(color: GideonAssistenteApp.subtext),
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.05),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      if (_possuoController.text.trim().isNotEmpty) {
+                        setState(() {
+                          _jaPossuo.add(_possuoController.text.trim());
+                          _possuoController.clear();
+                        });
+                      }
+                    },
+                    child: const Text('Adicionar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        ..._jaPossuo.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final item = entry.value;
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: _buildPierreCard(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('✔️ $item', style: const TextStyle(fontSize: 12, color: Colors.white)),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 16, color: GideonAssistenteApp.subtext),
+                    onPressed: () => setState(() => _jaPossuo.removeAt(idx)),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildChatOverlayModal() {
+    return Container(
+      color: GideonAssistenteApp.darkBg,
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => setState(() => _isChatOverlayOpen = false),
+                  ),
+                  const Column(
+                    children: [
+                      Text('Gideon IA', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white)),
+                      Text('Visão Computacional & Finanças', style: TextStyle(fontSize: 10, color: GideonAssistenteApp.subtext)),
+                    ],
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _chatMsgs.clear()),
+                    child: const Text('Limpar', style: TextStyle(color: GideonAssistenteApp.subtext, fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.white10, height: 1),
+
+            Expanded(
+              child: ListView(
+                controller: _scrollChatController,
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Center(
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(colors: [Color(0xFF1E293B), Color(0xFF0F172A)]),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: Colors.white12),
+                          ),
+                          child: const Center(
+                            child: Icon(Icons.smart_toy, color: GideonAssistenteApp.neonLime, size: 36),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text('Olá, Taylane', style: TextStyle(fontSize: 20, fontWeight: FontWeight.extrabold, color: Colors.white)),
+                        const Text('Como posso te ajudar hoje?', style: TextStyle(fontSize: 12, color: GideonAssistenteApp.subtext)),
+                        const SizedBox(height: 16),
+
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            _buildChatPromptChip('Meu saldo é '),
+                            _buildChatPromptChip('Gastei R\$ '),
+                            ActionChip(
+                              backgroundColor: GideonAssistenteApp.neonLime.withOpacity(0.1),
+                              side: BorderSide(color: GideonAssistenteApp.neonLime.withOpacity(0.3)),
+                              label: const Text('📷 Ler print de PIX', style: TextStyle(color: GideonAssistenteApp.neonLime, fontSize: 11)),
+                              onPressed: _simularLeituraPrint,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
+                  ),
+
+                  ..._chatMsgs.map((msg) {
+                    final isUser = msg['autor'] == 'user';
+                    return Align(
+                      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        padding: const EdgeInsets.all(12),
+                        constraints: const BoxConstraints(maxWidth: 300),
+                        decoration: BoxDecoration(
+                          color: isUser ? GideonAssistenteApp.neonLime : GideonAssistenteApp.cardBg,
+                          borderRadius: BorderRadius.circular(16),
+                          border: isUser ? null : Border.all(color: Colors.white10),
+                        ),
+                        child: Text(
+                          msg['texto'] ?? '',
+                          style: TextStyle(
+                            color: isUser ? Colors.black : Colors.white,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.camera_alt_outlined, color: Colors.white70),
+                    onPressed: _simularLeituraPrint,
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _chatController,
+                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Envie uma mensagem...',
+                        hintStyle: const TextStyle(color: GideonAssistenteApp.subtext),
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.05),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      ),
+                      onSubmitted: _processarMensagemUser,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () => _processarMensagemUser(_chatController.text),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: GideonAssistenteApp.neonLime,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Icon(Icons.send, color: Colors.black, size: 18),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -928,26 +1356,171 @@ Gerado por Gideon • Assistente Virtual 🌐
     );
   }
 
-  Widget _buildQuickPill(String label, VoidCallback onTap, bool isDark) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1)),
+  Widget _buildChatPromptChip(String text) {
+    return ActionChip(
+      backgroundColor: Colors.white.withOpacity(0.05),
+      side: BorderSide(color: Colors.white.withOpacity(0.1)),
+      label: Text(text, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+      onPressed: () {
+        _chatController.text = text;
+      },
+    );
+  }
+
+  void _abrirModalEditarSaldo() {
+    _editSaldoController.text = _saldoEmContas.toString();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: GideonAssistenteApp.cardBg,
+        title: const Text('Editar Saldo em Contas', style: TextStyle(color: Colors.white, fontSize: 14)),
+        content: TextField(
+          controller: _editSaldoController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(border: OutlineInputBorder()),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: isDark ? Colors.white70 : Colors.black87,
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: GideonAssistenteApp.neonLime, foregroundColor: Colors.black),
+            onPressed: () {
+              setState(() {
+                _saldoEmContas = double.tryParse(_editSaldoController.text) ?? _saldoEmContas;
+              });
+              Navigator.pop(ctx);
+            },
+            child: const Text('Salvar'),
           ),
-        ),
+        ],
       ),
     );
+  }
+
+  void _abrirModalEditarGastado() {
+    _editGastadoController.text = _gastosMesFinal.toString();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: GideonAssistenteApp.cardBg,
+        title: const Text('Editar Gastos do Mês', style: TextStyle(color: Colors.white, fontSize: 14)),
+        content: TextField(
+          controller: _editGastadoController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: GideonAssistenteApp.neonLime, foregroundColor: Colors.black),
+            onPressed: () {
+              setState(() {
+                _gastosMesManual = double.tryParse(_editGastadoController.text);
+              });
+              Navigator.pop(ctx);
+            },
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _abrirModalChaveApi() {
+    _apiKeyController.text = _geminiApiKey;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: GideonAssistenteApp.cardBg,
+        title: const Text('Configurar Chave Gemini API', style: TextStyle(color: Colors.white, fontSize: 14)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Cole sua chave do Google AI Studio para ativar o leitor de prints:', style: TextStyle(color: GideonAssistenteApp.subtext, fontSize: 11)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _apiKeyController,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+              decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'AIzaSy...'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: GideonAssistenteApp.neonLime, foregroundColor: Colors.black),
+            onPressed: () {
+              setState(() {
+                _geminiApiKey = _apiKeyController.text.trim();
+              });
+              Navigator.pop(ctx);
+            },
+            child: const Text('Ativar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _abrirModalImportarOFX() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: GideonAssistenteApp.cardBg,
+        title: const Text('Importar Extrato Bancário (.OFX/.CSV)', style: TextStyle(color: Colors.white, fontSize: 14)),
+        content: TextField(
+          controller: _ofxTextController,
+          maxLines: 5,
+          style: const TextStyle(color: Colors.white, fontSize: 11),
+          decoration: const InputDecoration(
+            hintText: 'Cole o conteúdo do arquivo .OFX ou .CSV do seu banco...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF34D399), foregroundColor: Colors.black),
+            onPressed: () {
+              final raw = _ofxTextController.text;
+              if (raw.isNotEmpty) {
+                setState(() {
+                  _despesas.insert(0, {
+                    'desc': 'Lançamento Bancário Importado',
+                    'category': 'Extrato',
+                    'amount': 45.00,
+                    'date': 'Hoje',
+                    'banco': 'Nubank',
+                    'pago': true,
+                  });
+                });
+                _ofxTextController.clear();
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('Importar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _simularLeituraPrint() {
+    setState(() {
+      _isChatOverlayOpen = true;
+      _chatMsgs.add({'autor': 'user', 'texto': '📷 [Print do PIX de R\$ 35,00 em Padaria]'});
+      _chatMsgs.add({'autor': 'bot', 'texto': '📸 Leitura do print com Gemini: Detectado PIX de R\$ 35,00 em Padaria. Lançado com sucesso!'});
+      _despesas.insert(0, {
+        'desc': 'Padaria (Print PIX)',
+        'category': 'Alimentação',
+        'amount': 35.00,
+        'date': 'Hoje',
+        'banco': 'Nubank',
+        'pago': true,
+      });
+    });
+    _scrollToBottomChat();
   }
 }
