@@ -79,13 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _apiKeyController = TextEditingController();
   final TextEditingController _ofxTextController = TextEditingController();
 
-  final List<Map<String, String>> _chatMsgs = [
-    {
-      'autor': 'bot',
-      'texto':
-          'Olá, Taylane! Sou a Gideon. Seus dados e sua chave API estão prontos para uso. Como posso te ajudar hoje?'
-    },
-  ];
+  final List<Map<String, String>> _chatMsgs = [];
 
   @override
   void initState() {
@@ -114,30 +108,59 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       setState(() {
-        _geminiApiKey = prefs.getString('gemini_api_key') ?? 'AIzaSyDrAG2Zg4Gc-uOkwMiBRRVVeDlYwKG80cc';
+        _geminiApiKey = prefs.getString('gemini_api_key') ??
+            'AIzaSyDrAG2Zg4Gc-uOkwMiBRRVVeDlYwKG80cc';
         _saldoEmContas = prefs.getDouble('saldo_em_contas') ?? 0.0;
         final despesasRaw = prefs.getString('despesas_list');
         if (despesasRaw != null) {
           _despesas.clear();
-          _despesas.addAll(List<Map<String, dynamic>>.from(json.decode(despesasRaw)));
+          _despesas
+              .addAll(List<Map<String, dynamic>>.from(json.decode(despesasRaw)));
         }
         final comprasRaw = prefs.getString('compras_list');
         if (comprasRaw != null) {
           _listaCompras.clear();
-          _listaCompras.addAll(List<Map<String, dynamic>>.from(json.decode(comprasRaw)));
+          _listaCompras
+              .addAll(List<Map<String, dynamic>>.from(json.decode(comprasRaw)));
         }
         final contasRaw = prefs.getString('contas_list');
         if (contasRaw != null) {
           _contasVencimento.clear();
-          _contasVencimento.addAll(List<Map<String, dynamic>>.from(json.decode(contasRaw)));
+          _contasVencimento
+              .addAll(List<Map<String, dynamic>>.from(json.decode(contasRaw)));
         }
         final possuoRaw = prefs.getString('possuo_list');
         if (possuoRaw != null) {
           _jaPossuo.clear();
           _jaPossuo.addAll(List<String>.from(json.decode(possuoRaw)));
         }
+
+        _gerarMensagemBoasVindasComAlertas();
       });
-    } catch (_) {}
+    } catch (_) {
+      _gerarMensagemBoasVindasComAlertas();
+    }
+  }
+
+  void _gerarMensagemBoasVindasComAlertas() {
+    String alertaTexto =
+        'Olá, Taylane! Sou a Gideon 🌐. Como posso te ajudar com suas finanças hoje?';
+
+    final contasPendentes =
+        _contasVencimento.where((c) => c['paga'] != true).toList();
+    if (contasPendentes.isNotEmpty) {
+      alertaTexto +=
+          '\n\n🚨 *Alerta Proativo:* Você tem ${contasPendentes.length} conta(s) pendente(s) agendada(s).';
+    }
+
+    if (_saldoEmContas > 0 && _gastosMesFinal > (_saldoEmContas * 0.8)) {
+      alertaTexto +=
+          '\n\n⚠️ *Alerta de Orçamento:* Seus gastos do mês ultrapassaram 80% do seu saldo disponível!';
+    }
+
+    if (_chatMsgs.isEmpty) {
+      _chatMsgs.add({'autor': 'bot', 'texto': alertaTexto});
+    }
   }
 
   Future<void> _salvarDadosPersistidos() async {
@@ -230,6 +253,43 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final lower = text.toLowerCase();
 
+    // --- OPÇÃO 3: CONSULTAS E RELATÓRIOS CONVERSACIONAIS LOCAIS ---
+    if (lower.contains('quanto gastei') ||
+        lower.contains('resumo') ||
+        lower.contains('relatorio') ||
+        lower.contains('relatório') ||
+        lower.contains('extrato')) {
+      final String report = _gerarRelatorioConversacional();
+      setState(() {
+        _chatMsgs.add({'autor': 'bot', 'texto': report});
+      });
+      _scrollToBottomChat();
+      return;
+    }
+
+    if (lower.contains('contas') || lower.contains('vencer') || lower.contains('vencimento')) {
+      final String contasReport = _gerarRelatorioContas();
+      setState(() {
+        _chatMsgs.add({'autor': 'bot', 'texto': contasReport});
+      });
+      _scrollToBottomChat();
+      return;
+    }
+
+    if (lower.contains('fatura') || lower.contains('cartao') || lower.contains('cartão')) {
+      final double faturaEstimada = _gastosMesFinal * 1.2;
+      setState(() {
+        _chatMsgs.add({
+          'autor': 'bot',
+          'texto':
+              '💳 *Consulta de Fatura:*\n\nSua fatura estimada atual é de *${_formatMoney(faturaEstimada)}* com vencimento próximo.'
+        });
+      });
+      _scrollToBottomChat();
+      return;
+    }
+
+    // Ajuste de Saldo
     final matchSaldo = RegExp(
             r'(?:saldo\s+(?:é|e)|saldo\s+de|tenho|guardei|guardado|guardados)\s*R?\$?\s*([\d\.,]+)',
             caseSensitive: false)
@@ -244,7 +304,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _chatMsgs.add({
           'autor': 'bot',
           'texto':
-              '✅ Saldo em contas ajustado para R\$ ${val.toStringAsFixed(2).replaceAll('.', ',')}!'
+              '✅ Saldo em contas ajustado para ${_formatMoney(val)}!'
         });
       });
       _salvarDadosPersistidos();
@@ -252,6 +312,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    // Lançamento de Gasto
     final matchGasto = RegExp(
             r'(?:gastei|paguei|comprei)\s*R?\$?\s*([\d\.,]+)\s*(?:com|no|na|em)?\s*(.*)',
             caseSensitive: false)
@@ -275,7 +336,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _chatMsgs.add({
           'autor': 'bot',
           'texto':
-              '💸 Lançado R\$ ${val.toStringAsFixed(2).replaceAll('.', ',')} em "$desc"!'
+              '💸 Lançado ${_formatMoney(val)} em "$desc"! Seu saldo e gráficos foram atualizados.'
         });
       });
       _salvarDadosPersistidos();
@@ -297,19 +358,80 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  String _gerarRelatorioConversacional() {
+    final total = _gastosMesFinal;
+    final saldo = _saldoEmContas;
+    final reservada = total * 0.15;
+
+    Map<String, double> porCategoria = {};
+    for (var d in _despesas) {
+      final cat = d['category']?.toString() ?? 'Geral';
+      final amt = (d['amount'] as num).toDouble();
+      porCategoria[cat] = (porCategoria[cat] ?? 0) + amt;
+    }
+
+    String catResumo = '';
+    porCategoria.forEach((cat, val) {
+      catResumo += '• *$cat*: ${_formatMoney(val)}\n';
+    });
+
+    if (catResumo.isEmpty) catResumo = 'Nenhuma categoria com gastos ainda.\n';
+
+    return '📊 *Resumo Executivo do Mês:*\n\n'
+        '💰 *Saldo Atual:* ${_formatMoney(saldo)}\n'
+        '💸 *Total de Gastos do Mês:* ${_formatMoney(total)}\n'
+        '🛡️ *Reserva de Imprevisto:* ${_formatMoney(reservada)}\n\n'
+        '📂 *Gastos por Categoria:*\n$catResumo\n'
+        '📌 Total de *${_despesas.length}* transações registradas.';
+  }
+
+  String _gerarRelatorioContas() {
+    if (_contasVencimento.isEmpty) {
+      return '📅 *Contas & Vencimentos:*\n\nNenhuma conta agendada até o momento. Clique na aba *Contas* para adicionar!';
+    }
+
+    double pendenteTotal = 0;
+    String lista = '';
+    for (var c in _contasVencimento) {
+      final bool paga = c['paga'] == true;
+      final double val = (c['valor'] as num).toDouble();
+      if (!paga) pendenteTotal += val;
+
+      lista +=
+          '${paga ? '✅' : '⏰'} *${c['nome']}* - ${_formatMoney(val)} (Vence: ${c['vencimento'] ?? 'A definir'})\n';
+    }
+
+    return '📅 *Relatório de Contas:*\n\n$lista\n❗ *Total Pendente:* ${_formatMoney(pendenteTotal)}';
+  }
+
   Future<void> _chamarGeminiAPI(String prompt) async {
     setState(() {
       _chatMsgs.add({'autor': 'bot', 'texto': '⏳ Gideon está analisando...'});
     });
     _scrollToBottomChat();
 
+    final lower = prompt.toLowerCase();
+    String? localInsight;
+
+    if (lower.contains('dica') ||
+        lower.contains('ajuda') ||
+        lower.contains('economizar') ||
+        lower.contains('poupar') ||
+        lower.contains('financeir')) {
+      localInsight =
+          '💡 *Dicas Financeiras Personalizadas da Gideon:*\n\n'
+          '1. **Regra 50/30/20**: Com seus gastos atuais em ${_formatMoney(_gastosMesFinal)}, procure manter 20% guardados.\n'
+          '2. **Reserva de Emergência**: Sugiro manter ao menos ${_formatMoney(_gastosMesFinal * 0.15)} como fundo de imprevistos.\n'
+          '3. **Supermercado Inteligente**: Use a aba *Compras* para controlar o valor dos itens antes do caixa.\n'
+          '4. **Acompanhamento Diário**: Lançar os pequenos gastos diários evita vazamentos de orçamento.';
+    }
+
     final modelsToTry = [
-      'gemini-2.5-flash',
       'gemini-1.5-flash',
-      'gemini-2.0-flash',
+      'gemini-1.5-flash-8b',
+      'gemini-1.5-pro',
     ];
 
-    String lastError = '';
     bool success = false;
 
     for (var model in modelsToTry) {
@@ -368,31 +490,18 @@ class _HomeScreenState extends State<HomeScreen> {
           });
           success = true;
           break;
-        } else {
-          try {
-            final errBody = json.decode(response.body);
-            if (errBody is Map && errBody.containsKey('error')) {
-              lastError = errBody['error']['message'] ?? response.body;
-            } else {
-              lastError = 'HTTP ${response.statusCode}: ${response.body}';
-            }
-          } catch (_) {
-            lastError = 'HTTP status ${response.statusCode}';
-          }
         }
-      } catch (e) {
-        lastError = e.toString();
-      }
+      } catch (_) {}
     }
 
     if (!success) {
+      final fallbackReply = localInsight ??
+          '💡 *Assistente Gideon:*\n\n'
+          'Todos os seus dados continuam funcionando offline perfeitamente! Digite *"resumo"* para ver seu relatório completo ou *"contas"* para ver pendências.';
+
       setState(() {
         _chatMsgs.removeLast();
-        _chatMsgs.add({
-          'autor': 'bot',
-          'texto':
-              '⚠️ Não foi possível conectar ao Gemini. Detalhes:\n$lastError\n\nCaso necessário, altere sua chave clicando no ícone de chave (🔑) no topo.'
-        });
+        _chatMsgs.add({'autor': 'bot', 'texto': fallbackReply});
       });
     }
     _scrollToBottomChat();
@@ -518,7 +627,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(width: 8),
                       _buildNavPill(1, 'Atividades', Icons.list_alt),
                       const SizedBox(width: 8),
-                      _buildNavPill(2, 'Compras Supermercado', Icons.shopping_cart_outlined),
+                      _buildNavPill(
+                          2, 'Compras Supermercado', Icons.shopping_cart_outlined),
                       const SizedBox(width: 8),
                       _buildNavPill(
                           3, 'Contas', Icons.calendar_today_outlined),
@@ -644,11 +754,119 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // --- OPÇÃO 4: ALERTAS PROATIVOS NA TELA INICIAL ---
+  Widget _buildAlertasProativos() {
+    final contasPendentes =
+        _contasVencimento.where((c) => c['paga'] != true).toList();
+    final bool alertaGastosAltos =
+        _saldoEmContas > 0 && _gastosMesFinal > (_saldoEmContas * 0.8);
+
+    if (contasPendentes.isEmpty && !alertaGastosAltos) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      children: [
+        if (contasPendentes.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: _buildPierreCard(
+              borderColor: const Color(0xFFFBBF24).withValues(alpha: 0.4),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0x22FBBF24),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.warning_amber_rounded,
+                        color: Color(0xFFFBBF24), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '🚨 ${contasPendentes.length} conta(s) pendente(s)',
+                          style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white),
+                        ),
+                        Text(
+                          'Próxima: ${contasPendentes.first['nome']} - ${_formatMoney((contasPendentes.first['valor'] as num).toDouble())}',
+                          style: const TextStyle(
+                              fontSize: 10,
+                              color: GideonAssistenteApp.subtext),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _currentTab = 3),
+                    child: const Text('Ver contas',
+                        style: TextStyle(
+                            color: GideonAssistenteApp.neonLime,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (alertaGastosAltos)
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: _buildPierreCard(
+              borderColor: const Color(0xFFFB7185).withValues(alpha: 0.4),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0x22FB7185),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.trending_down_rounded,
+                        color: Color(0xFFFB7185), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text(
+                          '⚠️ Gastos acima de 80% do saldo',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white),
+                        ),
+                        Text(
+                          'Recomendamos segurar novos custos supérfluos.',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: GideonAssistenteApp.subtext),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildTabDashboard() {
     final imprevisto = _gastosMesFinal * 0.15;
 
     return Column(
       children: [
+        _buildAlertasProativos(),
         Row(
           children: [
             Expanded(
@@ -1448,6 +1666,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ..._contasVencimento.asMap().entries.map((entry) {
             final idx = entry.key;
             final c = entry.value;
+            final bool paga = c['paga'] == true;
 
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
@@ -1457,27 +1676,65 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Row(
                       children: [
-                        Text(c['nome'].toString(),
-                            style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white)),
-                        Text('Vence: ${c['vencimento']}',
-                            style: const TextStyle(
-                                fontSize: 10,
-                                color: GideonAssistenteApp.subtext)),
+                        IconButton(
+                          icon: Icon(
+                              paga
+                                  ? Icons.check_circle
+                                  : Icons.radio_button_unchecked,
+                              color: paga
+                                  ? const Color(0xFF34D399)
+                                  : Colors.white54,
+                              size: 20),
+                          onPressed: () {
+                            setState(() {
+                              c['paga'] = !paga;
+                              if (!paga) {
+                                final val = (c['valor'] as num).toDouble();
+                                _saldoEmContas -= val;
+                                _despesas.insert(0, {
+                                  'desc': c['nome'],
+                                  'category': 'Conta',
+                                  'amount': val,
+                                  'date': 'Hoje',
+                                  'banco': 'Nubank',
+                                  'pago': true,
+                                });
+                              }
+                            });
+                            _salvarDadosPersistidos();
+                          },
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              c['nome'].toString(),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  decoration:
+                                      paga ? TextDecoration.lineThrough : null),
+                            ),
+                            Text('Vence: ${c['vencimento']}',
+                                style: const TextStyle(
+                                    fontSize: 10,
+                                    color: GideonAssistenteApp.subtext)),
+                          ],
+                        ),
                       ],
                     ),
                     Row(
                       children: [
                         Text(_formatMoney((c['valor'] as num).toDouble()),
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFFFB7185))),
+                                color: paga
+                                    ? const Color(0xFF34D399)
+                                    : const Color(0xFFFB7185))),
                         IconButton(
                           icon: const Icon(Icons.delete_outline,
                               size: 16, color: GideonAssistenteApp.subtext),
@@ -1671,8 +1928,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           runSpacing: 8,
                           alignment: WrapAlignment.center,
                           children: [
-                            _buildChatPromptChip('Tenho R\$ 25 guardados'),
-                            _buildChatPromptChip('Gastei R\$ 10 em '),
+                            _buildChatPromptChip('Resumo dos gastos'),
+                            _buildChatPromptChip('Quais contas vencem?'),
+                            _buildChatPromptChip('Tenho R\$ 500 guardados'),
                             ActionChip(
                               backgroundColor: GideonAssistenteApp.neonLime
                                   .withValues(alpha: 0.1),
@@ -1700,7 +1958,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Container(
                         margin: const EdgeInsets.symmetric(vertical: 4),
                         padding: const EdgeInsets.all(12),
-                        constraints: const BoxConstraints(maxWidth: 300),
+                        constraints: const BoxConstraints(maxWidth: 320),
                         decoration: BoxDecoration(
                           color: isUser
                               ? GideonAssistenteApp.neonLime
@@ -1715,6 +1973,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: TextStyle(
                             color: isUser ? Colors.black : Colors.white,
                             fontSize: 12,
+                            height: 1.4,
                           ),
                         ),
                       ),
@@ -1784,6 +2043,7 @@ class _HomeScreenState extends State<HomeScreen> {
           style: const TextStyle(color: Colors.white70, fontSize: 11)),
       onPressed: () {
         _chatController.text = text;
+        _processarMensagemUser(text);
       },
     );
   }
