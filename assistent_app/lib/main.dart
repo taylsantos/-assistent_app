@@ -55,7 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
   double? _gastosMesManual;
   bool _ocultarValores = false;
   bool _isChatOverlayOpen = false;
-  String _geminiApiKey = '';
+  String _geminiApiKey = 'AIzaSyDrAG2Zg4Gc-uOkwMiBRRVVeDlYwKG80cc';
 
   final List<Map<String, dynamic>> _despesas = [];
   final List<Map<String, dynamic>> _listaCompras = [];
@@ -114,7 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       setState(() {
-        _geminiApiKey = prefs.getString('gemini_api_key') ?? '';
+        _geminiApiKey = prefs.getString('gemini_api_key') ?? 'AIzaSyDrAG2Zg4Gc-uOkwMiBRRVVeDlYwKG80cc';
         _saldoEmContas = prefs.getDouble('saldo_em_contas') ?? 0.0;
         final despesasRaw = prefs.getString('despesas_list');
         if (despesasRaw != null) {
@@ -303,73 +303,96 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     _scrollToBottomChat();
 
-    try {
-      final url = Uri.parse(
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$_geminiApiKey');
-      final response = await http
-          .post(
-            url,
-            headers: {'Content-Type': 'application/json'},
-            body: json.encode({
-              'contents': [
-                {
+    final modelsToTry = [
+      'gemini-2.5-flash',
+      'gemini-1.5-flash',
+      'gemini-2.0-flash',
+    ];
+
+    String lastError = '';
+    bool success = false;
+
+    for (var model in modelsToTry) {
+      try {
+        final url = Uri.parse(
+            'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$_geminiApiKey');
+        final response = await http
+            .post(
+              url,
+              headers: {'Content-Type': 'application/json'},
+              body: json.encode({
+                'contents': [
+                  {
+                    'parts': [
+                      {'text': prompt}
+                    ]
+                  }
+                ],
+                'systemInstruction': {
                   'parts': [
-                    {'text': prompt}
+                    {
+                      'text':
+                          'Você é a Gideon, assistente financeira pessoal da Taylane estilo Pierre. Responda de forma simples, elegante, motivadora e direta em português.'
+                    }
                   ]
                 }
-              ],
-              'systemInstruction': {
-                'parts': [
-                  {
-                    'text':
-                        'Você é a Gideon, assistente financeira pessoal da Taylane estilo Pierre. Responda de forma simples, elegante, motivadora e direta em português.'
-                  }
-                ]
-              }
-            }),
-          )
-          .timeout(const Duration(seconds: 10));
+              }),
+            )
+            .timeout(const Duration(seconds: 10));
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data =
-            json.decode(response.body) as Map<String, dynamic>;
-        String replyText = 'Sem resposta da IA.';
-        if (data.containsKey('candidates') &&
-            data['candidates'] is List &&
-            (data['candidates'] as List).isNotEmpty) {
-          final cand = data['candidates'][0];
-          if (cand is Map &&
-              cand.containsKey('content') &&
-              cand['content'] is Map) {
-            final content = cand['content'] as Map;
-            if (content.containsKey('parts') &&
-                content['parts'] is List &&
-                (content['parts'] as List).isNotEmpty) {
-              final part = content['parts'][0];
-              if (part is Map && part.containsKey('text')) {
-                replyText = part['text'].toString();
+        if (response.statusCode == 200) {
+          final Map<String, dynamic> data =
+              json.decode(response.body) as Map<String, dynamic>;
+          String replyText = 'Sem resposta da IA.';
+          if (data.containsKey('candidates') &&
+              data['candidates'] is List &&
+              (data['candidates'] as List).isNotEmpty) {
+            final cand = data['candidates'][0];
+            if (cand is Map &&
+                cand.containsKey('content') &&
+                cand['content'] is Map) {
+              final content = cand['content'] as Map;
+              if (content.containsKey('parts') &&
+                  content['parts'] is List &&
+                  (content['parts'] as List).isNotEmpty) {
+                final part = content['parts'][0];
+                if (part is Map && part.containsKey('text')) {
+                  replyText = part['text'].toString();
+                }
               }
             }
           }
-        }
-        setState(() {
-          _chatMsgs.removeLast();
-          _chatMsgs.add({'autor': 'bot', 'texto': replyText});
-        });
-      } else {
-        setState(() {
-          _chatMsgs.removeLast();
-          _chatMsgs.add({
-            'autor': 'bot',
-            'texto':
-                '⚠️ Não foi possível conectar ao Gemini. Verifique se sua chave API está correta.'
+          setState(() {
+            _chatMsgs.removeLast();
+            _chatMsgs.add({'autor': 'bot', 'texto': replyText});
           });
-        });
+          success = true;
+          break;
+        } else {
+          try {
+            final errBody = json.decode(response.body);
+            if (errBody is Map && errBody.containsKey('error')) {
+              lastError = errBody['error']['message'] ?? response.body;
+            } else {
+              lastError = 'HTTP ${response.statusCode}: ${response.body}';
+            }
+          } catch (_) {
+            lastError = 'HTTP status ${response.statusCode}';
+          }
+        }
+      } catch (e) {
+        lastError = e.toString();
       }
-    } catch (_) {
+    }
+
+    if (!success) {
       setState(() {
         _chatMsgs.removeLast();
-        _chatMsgs.add({'autor': 'bot', 'texto': '⚠️ Erro ao consultar a IA.'});
+        _chatMsgs.add({
+          'autor': 'bot',
+          'texto':
+              '⚠️ Não foi possível conectar ao Gemini. Detalhes:\n$lastError\n\nCaso necessário, altere sua chave clicando no ícone de chave (🔑) no topo.'
+        });
       });
     }
     _scrollToBottomChat();
