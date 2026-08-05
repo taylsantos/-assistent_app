@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 void main() {
@@ -49,43 +48,75 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Navegação Principal (0: Início, 1: Atividades, 2: Compras, 3: Contas, 4: Já Possuo)
   int _currentTab = 0;
 
-  // Estado Financeiro
   double _saldoEmContas = 131.38;
   double? _gastosMesManual;
   bool _ocultarValores = false;
   String _geminiApiKey = '';
 
-  // Transações / Despesas Recentes
   final List<Map<String, dynamic>> _despesas = [
-    {'desc': 'Transferência enviada', 'category': 'Apostas', 'amount': 10.00, 'date': 'Hoje', 'banco': 'Nubank', 'pago': true},
-    {'desc': 'Compra no débito via Nu', 'category': 'Serviços', 'amount': 11.30, 'date': 'Ontem', 'banco': 'Nubank', 'pago': true},
-    {'desc': 'Supermercado', 'category': 'Alimentação', 'amount': 26.68, 'date': 'Ontem', 'banco': 'Nubank', 'pago': true},
+    {
+      'desc': 'Transferência enviada',
+      'category': 'Apostas',
+      'amount': 10.00,
+      'date': 'Hoje',
+      'banco': 'Nubank',
+      'pago': true
+    },
+    {
+      'desc': 'Compra no débito via Nu',
+      'category': 'Serviços',
+      'amount': 11.30,
+      'date': 'Ontem',
+      'banco': 'Nubank',
+      'pago': true
+    },
+    {
+      'desc': 'Supermercado',
+      'category': 'Alimentação',
+      'amount': 26.68,
+      'date': 'Ontem',
+      'banco': 'Nubank',
+      'pago': true
+    },
   ];
 
-  // Lista de Compras com Soma Automática
   final List<Map<String, dynamic>> _listaCompras = [];
 
-  // Contas e Vencimentos
   final List<Map<String, dynamic>> _contasVencimento = [
-    {'nome': 'Aluguel do Mês', 'valor': 1200.0, 'vencimento': '10/08/2026', 'paga': false},
-    {'nome': 'Conta de Luz', 'valor': 185.50, 'vencimento': '15/08/2026', 'paga': false},
+    {
+      'nome': 'Aluguel do Mês',
+      'valor': 1200.0,
+      'vencimento': '10/08/2026',
+      'paga': false
+    },
+    {
+      'nome': 'Conta de Luz',
+      'valor': 185.50,
+      'vencimento': '15/08/2026',
+      'paga': false
+    },
   ];
 
-  // Objetos que Já Possuo
-  final List<String> _jaPossuo = ['Geladeira Frost Free', 'Máquina de Lavar', 'Smart TV 55"'];
+  final List<String> _jaPossuo = [
+    'Geladeira Frost Free',
+    'Máquina de Lavar',
+    'Smart TV 55"'
+  ];
 
-  // Chat com a Gideon
   final List<Map<String, String>> _chatMsgs = [
-    {'autor': 'bot', 'texto': 'Olá, Taylane! Sou a Gideon. Como posso te ajudar nas tuas finanças hoje?'},
+    {
+      'autor': 'bot',
+      'texto':
+          'Olá, Taylane! Sou a Gideon. Como posso te ajudar nas tuas finanças hoje?'
+    },
   ];
+
   final TextEditingController _chatController = TextEditingController();
   final ScrollController _scrollChatController = ScrollController();
   bool _isChatOverlayOpen = false;
 
-  // Controllers para Modais
   final TextEditingController _editSaldoController = TextEditingController();
   final TextEditingController _editGastadoController = TextEditingController();
   final TextEditingController _apiKeyController = TextEditingController();
@@ -191,26 +222,37 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     final lower = text.toLowerCase();
-    
-    // RegEx Saldo
-    final matchSaldo = RegExp(r'(?:saldo\s+(?:é|e)|saldo\s+de)\s*R?\$?\s*([\d\.,]+)', caseSensitive: false).firstMatch(lower);
+
+    final matchSaldo = RegExp(
+            r'(?:saldo\s+(?:é|e)|saldo\s+de)\s*R?\$?\s*([\d\.,]+)',
+            caseSensitive: false)
+        .firstMatch(lower);
     if (matchSaldo != null) {
-      final valStr = matchSaldo.group(1)!.replaceAll('.', '').replaceAll(',', '.');
+      final valStr =
+          matchSaldo.group(1)!.replaceAll('.', '').replaceAll(',', '.');
       final val = double.tryParse(valStr) ?? 0.0;
       setState(() {
         _saldoEmContas = val;
-        _chatMsgs.add({'autor': 'bot', 'texto': '✅ Saldo em contas ajustado para R\$ ${val.toStringAsFixed(2)}!'});
+        _chatMsgs.add({
+          'autor': 'bot',
+          'texto': '✅ Saldo em contas ajustado para R\$ ${val.toStringAsFixed(2)}!'
+        });
       });
       _scrollToBottomChat();
       return;
     }
 
-    // RegEx Gastei
-    final matchGasto = RegExp(r'(?:gastei|paguei)\s*R?\$?\s*([\d\.,]+)\s*(?:com|no|na|em)?\s*(.*)', caseSensitive: false).firstMatch(lower);
+    final matchGasto = RegExp(
+            r'(?:gastei|paguei)\s*R?\$?\s*([\d\.,]+)\s*(?:com|no|na|em)?\s*(.*)',
+            caseSensitive: false)
+        .firstMatch(lower);
     if (matchGasto != null) {
-      final valStr = matchGasto.group(1)!.replaceAll('.', '').replaceAll(',', '.');
+      final valStr =
+          matchGasto.group(1)!.replaceAll('.', '').replaceAll(',', '.');
       final val = double.tryParse(valStr) ?? 0.0;
-      final desc = matchGasto.group(2)?.trim().isNotEmpty == true ? matchGasto.group(2)!.trim() : 'Gasto Rápido';
+      final desc = matchGasto.group(2)?.trim().isNotEmpty == true
+          ? matchGasto.group(2)!.trim()
+          : 'Gasto Rápido';
       setState(() {
         _despesas.insert(0, {
           'desc': desc,
@@ -220,7 +262,10 @@ class _HomeScreenState extends State<HomeScreen> {
           'banco': 'Nubank',
           'pago': true,
         });
-        _chatMsgs.add({'autor': 'bot', 'texto': '💸 Lançado R\$ ${val.toStringAsFixed(2)} em "$desc"!'});
+        _chatMsgs.add({
+          'autor': 'bot',
+          'texto': '💸 Lançado R\$ ${val.toStringAsFixed(2)} em "$desc"!'
+        });
       });
       _scrollToBottomChat();
       return;
@@ -230,7 +275,11 @@ class _HomeScreenState extends State<HomeScreen> {
       _chamarGeminiAPI(text);
     } else {
       setState(() {
-        _chatMsgs.add({'autor': 'bot', 'texto': '🌐 Registrado localmente! Para respostas com inteligência artificial completa ou análise de fotos, adicione sua chave API no topo.'});
+        _chatMsgs.add({
+          'autor': 'bot',
+          'texto':
+              '🌐 Registrado localmente! Para respostas com inteligência artificial completa ou análise de fotos, adicione sua chave API no topo.'
+        });
       });
       _scrollToBottomChat();
     }
@@ -243,30 +292,47 @@ class _HomeScreenState extends State<HomeScreen> {
     _scrollToBottomChat();
 
     try {
-      final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=$_geminiApiKey');
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'contents': [
-            {
-              'parts': [{'text': prompt}]
-            }
-          ],
-          'systemInstruction': {
-            'parts': [{'text': 'Você é a Gideon, assistente financeira pessoal estilo Pierre. Responda de forma simples, elegante e direta em português.'}]
-          }
-        }),
-      ).timeout(const Duration(seconds: 8));
+      final url = Uri.parse(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=$_geminiApiKey');
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'contents': [
+                {
+                  'parts': [
+                    {'text': prompt}
+                  ]
+                }
+              ],
+              'systemInstruction': {
+                'parts': [
+                  {
+                    'text':
+                        'Você é a Gideon, assistente financeira pessoal estilo Pierre. Responda de forma simples, elegante e direta em português.'
+                  }
+                ]
+              }
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body) as Map<String, dynamic>;
+        final Map<String, dynamic> data =
+            json.decode(response.body) as Map<String, dynamic>;
         String replyText = 'Sem resposta da IA.';
-        if (data.containsKey('candidates') && data['candidates'] is List && (data['candidates'] as List).isNotEmpty) {
+        if (data.containsKey('candidates') &&
+            data['candidates'] is List &&
+            (data['candidates'] as List).isNotEmpty) {
           final cand = data['candidates'][0];
-          if (cand is Map && cand.containsKey('content') && cand['content'] is Map) {
+          if (cand is Map &&
+              cand.containsKey('content') &&
+              cand['content'] is Map) {
             final content = cand['content'] as Map;
-            if (content.containsKey('parts') && content['parts'] is List && (content['parts'] as List).isNotEmpty) {
+            if (content.containsKey('parts') &&
+                content['parts'] is List &&
+                (content['parts'] as List).isNotEmpty) {
               final part = content['parts'][0];
               if (part is Map && part.containsKey('text')) {
                 replyText = part['text'].toString();
@@ -281,7 +347,11 @@ class _HomeScreenState extends State<HomeScreen> {
       } else {
         setState(() {
           _chatMsgs.removeLast();
-          _chatMsgs.add({'autor': 'bot', 'texto': '⚠️ Não foi possível conectar ao Gemini. Verifique sua chave API.'});
+          _chatMsgs.add({
+            'autor': 'bot',
+            'texto':
+                '⚠️ Não foi possível conectar ao Gemini. Verifique sua chave API.'
+          });
         });
       }
     } catch (_) {
@@ -313,9 +383,9 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Column(
               children: [
-                // Top Header
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -327,23 +397,31 @@ class _HomeScreenState extends State<HomeScreen> {
                             decoration: BoxDecoration(
                               color: const Color(0xFF1E293B),
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white.withOpacity(0.1)),
+                              border: Border.all(
+                                  color: Colors.white.withOpacity(0.1)),
                             ),
                             child: const Center(
-                              child: Icon(Icons.smart_toy, color: GideonAssistenteApp.neonLime, size: 24),
+                              child: Icon(Icons.smart_toy,
+                                  color: GideonAssistenteApp.neonLime, size: 24),
                             ),
                           ),
                           const SizedBox(width: 12),
-                          const Column(
+                          Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+                            children: const [
                               Text(
                                 'Taylane',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.extrabold, color: Colors.white),
+                                style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white),
                               ),
                               Text(
                                 'Assistente Pessoal & Finanças',
-                                style: TextStyle(fontSize: 11, color: GideonAssistenteApp.subtext, fontWeight: FontWeight.w500),
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: GideonAssistenteApp.subtext,
+                                    fontWeight: FontWeight.w500),
                               ),
                             ],
                           ),
@@ -356,10 +434,12 @@ class _HomeScreenState extends State<HomeScreen> {
                               backgroundColor: Colors.white.withOpacity(0.05),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
-                                side: BorderSide(color: Colors.white.withOpacity(0.1)),
+                                side: BorderSide(
+                                    color: Colors.white.withOpacity(0.1)),
                               ),
                             ),
-                            icon: const Icon(Icons.vpn_key_outlined, color: GideonAssistenteApp.neonLime, size: 18),
+                            icon: const Icon(Icons.vpn_key_outlined,
+                                color: GideonAssistenteApp.neonLime, size: 18),
                             onPressed: _abrirModalChaveApi,
                             tooltip: 'Configurar Chave API',
                           ),
@@ -369,12 +449,17 @@ class _HomeScreenState extends State<HomeScreen> {
                               backgroundColor: Colors.white.withOpacity(0.05),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
-                                side: BorderSide(color: Colors.white.withOpacity(0.1)),
+                                side: BorderSide(
+                                    color: Colors.white.withOpacity(0.1)),
                               ),
                             ),
                             icon: Icon(
-                              _ocultarValores ? Icons.visibility_off : Icons.visibility,
-                              color: _ocultarValores ? const Color(0xFFFB7185) : Colors.white70,
+                              _ocultarValores
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                              color: _ocultarValores
+                                  ? const Color(0xFFFB7185)
+                                  : Colors.white70,
                               size: 18,
                             ),
                             onPressed: () {
@@ -388,11 +473,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
-
-                // Nav Pills
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   child: Row(
                     children: [
                       _buildNavPill(0, 'Início', Icons.pie_chart_outline),
@@ -401,18 +485,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(width: 8),
                       _buildNavPill(2, 'Compras', Icons.shopping_cart_outlined),
                       const SizedBox(width: 8),
-                      _buildNavPill(3, 'Contas', Icons.calendar_today_outlined),
+                      _buildNavPill(
+                          3, 'Contas', Icons.calendar_today_outlined),
                       const SizedBox(width: 8),
                       _buildNavPill(4, 'Já Possuo', Icons.inventory_2_outlined),
                     ],
                   ),
                 ),
                 const SizedBox(height: 8),
-
-                // Active Tab Content
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
                     child: Center(
                       child: Container(
                         constraints: const BoxConstraints(maxWidth: 500),
@@ -432,8 +516,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
-
-            // Floating Bottom Bar "Pergunte à Gideon..."
             Positioned(
               left: 16,
               right: 16,
@@ -442,7 +524,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Container(
                   constraints: const BoxConstraints(maxWidth: 500),
                   child: _buildPierreCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
                     borderColor: Colors.white.withOpacity(0.12),
                     onTap: () {
                       setState(() {
@@ -452,27 +535,33 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Row(
+                        Row(
                           children: [
                             Container(
-                              padding: EdgeInsets.all(6),
+                              padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
-                                color: Color(0x22CCFF00),
-                                borderRadius: BorderRadius.all(Radius.circular(12)),
+                                color: const Color(0x22CCFF00),
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              child: Icon(Icons.qr_code_scanner, color: GideonAssistenteApp.neonLime, size: 16),
+                              child: const Icon(Icons.qr_code_scanner,
+                                  color: GideonAssistenteApp.neonLime,
+                                  size: 16),
                             ),
-                            SizedBox(width: 10),
-                            Text(
+                            const SizedBox(width: 10),
+                            const Text(
                               'Pergunte à Gideon...',
-                              style: TextStyle(fontSize: 13, color: GideonAssistenteApp.subtext, fontWeight: FontWeight.w500),
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  color: GideonAssistenteApp.subtext,
+                                  fontWeight: FontWeight.w500),
                             ),
                           ],
                         ),
                         Row(
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.camera_alt_outlined, color: Colors.white70, size: 18),
+                              icon: const Icon(Icons.camera_alt_outlined,
+                                  color: Colors.white70, size: 18),
                               onPressed: _simularLeituraPrint,
                               tooltip: 'Ler Print de PIX',
                             ),
@@ -483,7 +572,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 color: GideonAssistenteApp.neonLime,
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Icon(Icons.arrow_upward, color: Colors.black, size: 16),
+                              child: const Icon(Icons.arrow_upward,
+                                  color: Colors.black, size: 16),
                             ),
                           ],
                         ),
@@ -493,7 +583,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-
             if (_isChatOverlayOpen) _buildChatOverlayModal(),
           ],
         ),
@@ -506,13 +595,16 @@ class _HomeScreenState extends State<HomeScreen> {
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        backgroundColor: isSelected ? GideonAssistenteApp.neonLime : Colors.white.withOpacity(0.05),
+        backgroundColor: isSelected
+            ? GideonAssistenteApp.neonLime
+            : Colors.white.withOpacity(0.05),
         foregroundColor: isSelected ? Colors.black : Colors.white70,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         elevation: 0,
       ),
       icon: Icon(icon, size: 14),
-      label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+      label: Text(label,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
       onPressed: () => setState(() => _currentTab = index),
     );
   }
@@ -540,16 +632,24 @@ class _HomeScreenState extends State<HomeScreen> {
                             _buildMiniIconBadge('it', const Color(0xFF2563EB)),
                           ],
                         ),
-                        const Icon(Icons.chevron_right, size: 14, color: GideonAssistenteApp.subtext),
+                        const Icon(Icons.chevron_right,
+                            size: 14, color: GideonAssistenteApp.subtext),
                       ],
                     ),
                     const SizedBox(height: 24),
-                    const Text('Saldo em contas', style: TextStyle(fontSize: 11, color: GideonAssistenteApp.subtext)),
+                    const Text('Saldo em contas',
+                        style: TextStyle(
+                            fontSize: 11, color: GideonAssistenteApp.subtext)),
                     Text(
                       _formatMoney(_saldoEmContas),
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                      style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white),
                     ),
-                    const Text('3 contas conectadas', style: TextStyle(fontSize: 9, color: GideonAssistenteApp.subtext)),
+                    const Text('3 contas conectadas',
+                        style: TextStyle(
+                            fontSize: 9, color: GideonAssistenteApp.subtext)),
                   ],
                 ),
               ),
@@ -566,21 +666,38 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(width: 8, height: 16, color: GideonAssistenteApp.neonLime),
+                          Container(
+                              width: 8,
+                              height: 16,
+                              color: GideonAssistenteApp.neonLime),
                           const SizedBox(width: 2),
-                          Container(width: 8, height: 24, color: GideonAssistenteApp.neonLime),
+                          Container(
+                              width: 8,
+                              height: 24,
+                              color: GideonAssistenteApp.neonLime),
                           const SizedBox(width: 2),
-                          Container(width: 8, height: 12, color: GideonAssistenteApp.neonLime.withOpacity(0.4)),
+                          Container(
+                              width: 8,
+                              height: 12,
+                              color: GideonAssistenteApp.neonLime
+                                  .withOpacity(0.4)),
                         ],
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const Text('Gastos do mês', style: TextStyle(fontSize: 11, color: GideonAssistenteApp.subtext)),
+                    const Text('Gastos do mês',
+                        style: TextStyle(
+                            fontSize: 11, color: GideonAssistenteApp.subtext)),
                     Text(
                       _formatMoney(_gastosMesFinal),
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                      style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white),
                     ),
-                    Text('${_despesas.length} despesas lançadas', style: const TextStyle(fontSize: 9, color: GideonAssistenteApp.subtext)),
+                    Text('${_despesas.length} despesas lançadas',
+                        style: const TextStyle(
+                            fontSize: 9, color: GideonAssistenteApp.subtext)),
                   ],
                 ),
               ),
@@ -588,7 +705,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         const SizedBox(height: 12),
-
         Row(
           children: [
             Expanded(
@@ -596,26 +712,40 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
+                      children: const [
                         Row(
                           children: [
-                            Icon(Icons.credit_card, size: 14, color: Color(0xFFFBBF24)),
+                            Icon(Icons.credit_card,
+                                size: 14, color: Color(0xFFFBBF24)),
                             SizedBox(width: 4),
-                            Text('•••• 9694', style: TextStyle(fontSize: 10, color: GideonAssistenteApp.subtext)),
+                            Text('•••• 9694',
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    color: GideonAssistenteApp.subtext)),
                           ],
                         ),
-                        Icon(Icons.chevron_right, size: 14, color: GideonAssistenteApp.subtext),
+                        Icon(Icons.chevron_right,
+                            size: 14, color: GideonAssistenteApp.subtext),
                       ],
                     ),
                     const SizedBox(height: 20),
-                    const Text('Fatura Atual', style: TextStyle(fontSize: 11, color: GideonAssistenteApp.subtext)),
+                    const Text('Fatura Atual',
+                        style: TextStyle(
+                            fontSize: 11, color: GideonAssistenteApp.subtext)),
                     Text(
                       _formatMoney(_gastosMesFinal * 1.2),
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                      style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white),
                     ),
-                    const Text('Vence em breve', style: TextStyle(fontSize: 9, color: Color(0xFFFBBF24), fontWeight: FontWeight.bold)),
+                    const Text('Vence em breve',
+                        style: TextStyle(
+                            fontSize: 9,
+                            color: Color(0xFFFBBF24),
+                            fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
@@ -626,16 +756,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Fluxo de caixa', style: TextStyle(fontSize: 11, color: GideonAssistenteApp.subtext)),
-                        Icon(Icons.show_chart, size: 14, color: GideonAssistenteApp.neonLime),
+                      children: const [
+                        Text('Fluxo de caixa',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: GideonAssistenteApp.subtext)),
+                        Icon(Icons.show_chart,
+                            size: 14, color: GideonAssistenteApp.neonLime),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Text('+R\$ 0,00', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF34D399))),
-                    Text('-${_formatMoney(_gastosMesFinal)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFFB7185))),
+                    const Text('+R\$ 0,00',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF34D399))),
+                    Text('-${_formatMoney(_gastosMesFinal)}',
+                        style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFFB7185))),
                     const SizedBox(height: 6),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
@@ -653,8 +795,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         const SizedBox(height: 12),
-
-        // Fundo de Imprevistos (+15%)
         _buildPierreCard(
           child: Row(
             children: [
@@ -663,10 +803,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 height: 44,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: GideonAssistenteApp.neonLime, width: 3),
+                  border:
+                      Border.all(color: GideonAssistenteApp.neonLime, width: 3),
                 ),
                 child: const Center(
-                  child: Text('15%', style: TextStyle(fontSize: 10, fontWeight: FontWeight.extrabold, color: GideonAssistenteApp.neonLime)),
+                  child: Text('15%',
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: GideonAssistenteApp.neonLime)),
                 ),
               ),
               const SizedBox(width: 12),
@@ -674,10 +819,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Fundo de Imprevistos Recomendado', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                    const Text('Fundo de Imprevistos Recomendado',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white)),
                     Text(
                       'Reserva de ${_formatMoney(imprevisto)} sugerida para custos ocultos.',
-                      style: const TextStyle(fontSize: 11, color: GideonAssistenteApp.subtext),
+                      style: const TextStyle(
+                          fontSize: 11, color: GideonAssistenteApp.subtext),
                     ),
                   ],
                 ),
@@ -686,8 +836,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 12),
-
-        // Transações Recentes
         _buildPierreCard(
           child: Column(
             children: [
@@ -696,47 +844,70 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Row(
                     children: [
-                      const Text('Transações Recentes', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                      const Text('Transações Recentes',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white)),
                       const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(10)),
-                        child: Text('${_despesas.length}', style: const TextStyle(fontSize: 10, color: Colors.white)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                            color: Colors.white10,
+                            borderRadius: BorderRadius.circular(10)),
+                        child: Text('${_despesas.length}',
+                            style: const TextStyle(
+                                fontSize: 10, color: Colors.white)),
                       ),
                     ],
                   ),
                   TextButton(
                     onPressed: () => setState(() => _currentTab = 1),
-                    child: const Text('Ver todas', style: TextStyle(color: GideonAssistenteApp.neonLime, fontSize: 11, fontWeight: FontWeight.bold)),
+                    child: const Text('Ver todas',
+                        style: TextStyle(
+                            color: GideonAssistenteApp.neonLime,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               ..._despesas.take(3).map((d) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
+                    padding: const EdgeInsets.symmetric(vertical: 6.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _buildMiniIconBadge('nu', const Color(0xFF9333EA)),
-                        const SizedBox(width: 10),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        Row(
                           children: [
-                            Text(d['desc'].toString(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                            Text('${d['date']} • ${d['category']}', style: const TextStyle(fontSize: 10, color: GideonAssistenteApp.subtext)),
+                            _buildMiniIconBadge('nu', const Color(0xFF9333EA)),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(d['desc'].toString(),
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white)),
+                                Text('${d['date']} • ${d['category']}',
+                                    style: const TextStyle(
+                                        fontSize: 10,
+                                        color: GideonAssistenteApp.subtext)),
+                              ],
+                            ),
                           ],
+                        ),
+                        Text(
+                          '-${_formatMoney((d['amount'] as num).toDouble())}',
+                          style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFFB7185)),
                         ),
                       ],
                     ),
-                    Text(
-                      '-${_formatMoney((d['amount'] as num).toDouble())}',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFFB7185)),
-                    ),
-                  ],
-                ),
-              )),
+                  )),
             ],
           ),
         ),
@@ -755,7 +926,9 @@ class _HomeScreenState extends State<HomeScreen> {
         border: Border.all(color: GideonAssistenteApp.darkBg, width: 1.5),
       ),
       child: Center(
-        child: Text(text, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white)),
+        child: Text(text,
+            style: const TextStyle(
+                fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white)),
       ),
     );
   }
@@ -764,9 +937,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Atividades', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+        const Text('Atividades',
+            style: TextStyle(
+                fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
         const SizedBox(height: 12),
-
         _buildPierreCard(
           borderColor: const Color(0xFF34D399).withOpacity(0.3),
           child: Row(
@@ -778,15 +952,22 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: const Color(0x2234D399),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.file_present, color: Color(0xFF34D399), size: 18),
+                child: const Icon(Icons.file_present,
+                    color: Color(0xFF34D399), size: 18),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Importar Extrato Bancário', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                    Text('Ficheiros .OFX ou .CSV do seu banco', style: TextStyle(fontSize: 10, color: GideonAssistenteApp.subtext)),
+                  children: const [
+                    Text('Importar Extrato Bancário',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white)),
+                    Text('Ficheiros .OFX ou .CSV do seu banco',
+                        style: TextStyle(
+                            fontSize: 10, color: GideonAssistenteApp.subtext)),
                   ],
                 ),
               ),
@@ -794,45 +975,59 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0x2234D399),
                   foregroundColor: const Color(0xFF34D399),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
                 ),
                 onPressed: _abrirModalImportarOFX,
-                child: const Text('Carregar', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                child: const Text('Carregar',
+                    style: TextStyle(
+                        fontSize: 11, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
         ),
         const SizedBox(height: 12),
-
         ..._despesas.map((d) => Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: _buildPierreCard(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: _buildPierreCard(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Icon(Icons.shopping_bag_outlined, size: 18, color: GideonAssistenteApp.subtext),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Row(
                       children: [
-                        Text(d['desc'].toString(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                        Text('${d['date']} • ${d['category']}', style: const TextStyle(fontSize: 10, color: GideonAssistenteApp.subtext)),
+                        const Icon(Icons.shopping_bag_outlined,
+                            size: 18, color: GideonAssistenteApp.subtext),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(d['desc'].toString(),
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white)),
+                            Text('${d['date']} • ${d['category']}',
+                                style: const TextStyle(
+                                    fontSize: 10,
+                                    color: GideonAssistenteApp.subtext)),
+                          ],
+                        ),
                       ],
+                    ),
+                    Text(
+                      '-${_formatMoney((d['amount'] as num).toDouble())}',
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFFB7185)),
                     ),
                   ],
                 ),
-                Text(
-                  '-${_formatMoney((d['amount'] as num).toDouble())}',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFFB7185)),
-                ),
-              ],
-            ),
-          ),
-        )),
+              ),
+            )),
       ],
     );
   }
@@ -844,15 +1039,19 @@ class _HomeScreenState extends State<HomeScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Lista de Compras', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+            const Text('Lista de Compras',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white)),
             TextButton(
               onPressed: () => setState(() => _listaCompras.clear()),
-              child: const Text('Limpar tudo', style: TextStyle(color: Color(0xFFFB7185), fontSize: 11)),
+              child: const Text('Limpar tudo',
+                  style: TextStyle(color: Color(0xFFFB7185), fontSize: 11)),
             ),
           ],
         ),
         const SizedBox(height: 12),
-
         Row(
           children: [
             Expanded(
@@ -860,10 +1059,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Total Estimado', style: TextStyle(fontSize: 11, color: GideonAssistenteApp.subtext)),
+                    const Text('Total Estimado',
+                        style: TextStyle(
+                            fontSize: 11, color: GideonAssistenteApp.subtext)),
                     const SizedBox(height: 4),
-                    Text(_formatMoney(_totalComprasEstimado), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: GideonAssistenteApp.neonLime)),
-                    Text('${_listaCompras.length} itens', style: const TextStyle(fontSize: 9, color: GideonAssistenteApp.subtext)),
+                    Text(_formatMoney(_totalComprasEstimado),
+                        style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: GideonAssistenteApp.neonLime)),
+                    Text('${_listaCompras.length} itens',
+                        style: const TextStyle(
+                            fontSize: 9, color: GideonAssistenteApp.subtext)),
                   ],
                 ),
               ),
@@ -874,10 +1081,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Já Comprado', style: TextStyle(fontSize: 11, color: GideonAssistenteApp.subtext)),
+                    const Text('Já Comprado',
+                        style: TextStyle(
+                            fontSize: 11, color: GideonAssistenteApp.subtext)),
                     const SizedBox(height: 4),
-                    Text(_formatMoney(_totalComprasConcluidas), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF34D399))),
-                    Text('${_listaCompras.where((c) => c['comprado'] == true).length} concluídos', style: const TextStyle(fontSize: 9, color: GideonAssistenteApp.subtext)),
+                    Text(_formatMoney(_totalComprasConcluidas),
+                        style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF34D399))),
+                    Text(
+                        '${_listaCompras.where((c) => c['comprado'] == true).length} concluídos',
+                        style: const TextStyle(
+                            fontSize: 9, color: GideonAssistenteApp.subtext)),
                   ],
                 ),
               ),
@@ -885,12 +1101,15 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         const SizedBox(height: 12),
-
         _buildPierreCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Novo Item para a Lista', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+              const Text('Novo Item para a Lista',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white)),
               const SizedBox(height: 10),
               Row(
                 children: [
@@ -898,14 +1117,19 @@ class _HomeScreenState extends State<HomeScreen> {
                     flex: 2,
                     child: TextField(
                       controller: _comprarNomeController,
-                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                      style:
+                          const TextStyle(fontSize: 12, color: Colors.white),
                       decoration: InputDecoration(
                         hintText: 'Ex: Cama Casal',
-                        hintStyle: const TextStyle(color: GideonAssistenteApp.subtext),
+                        hintStyle: const TextStyle(
+                            color: GideonAssistenteApp.subtext),
                         filled: true,
                         fillColor: Colors.white.withOpacity(0.05),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
                       ),
                     ),
                   ),
@@ -913,15 +1137,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     child: TextField(
                       controller: _comprarValorController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      style:
+                          const TextStyle(fontSize: 12, color: Colors.white),
                       decoration: InputDecoration(
                         hintText: 'Valor (R\$)',
-                        hintStyle: const TextStyle(color: GideonAssistenteApp.subtext),
+                        hintStyle: const TextStyle(
+                            color: GideonAssistenteApp.subtext),
                         filled: true,
                         fillColor: Colors.white.withOpacity(0.05),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
                       ),
                     ),
                   ),
@@ -935,27 +1165,32 @@ class _HomeScreenState extends State<HomeScreen> {
                     backgroundColor: GideonAssistenteApp.neonLime,
                     foregroundColor: Colors.black,
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () {
                     final nome = _comprarNomeController.text.trim();
-                    final valor = double.tryParse(_comprarValorController.text.replaceAll(',', '.')) ?? 0.0;
+                    final valor = double.tryParse(_comprarValorController.text
+                            .replaceAll(',', '.')) ??
+                        0.0;
                     if (nome.isNotEmpty) {
                       setState(() {
-                        _listaCompras.add({'nome': nome, 'valor': valor, 'comprado': false});
+                        _listaCompras.add(
+                            {'nome': nome, 'valor': valor, 'comprado': false});
                         _comprarNomeController.clear();
                         _comprarValorController.clear();
                       });
                     }
                   },
-                  child: const Text('Adicionar à Lista', style: TextStyle(fontWeight: FontWeight.extrabold, fontSize: 12)),
+                  child: const Text('Adicionar à Lista',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 12)),
                 ),
               ),
             ],
           ),
         ),
         const SizedBox(height: 12),
-
         ..._listaCompras.asMap().entries.map((entry) {
           final idx = entry.key;
           final item = entry.value;
@@ -964,7 +1199,8 @@ class _HomeScreenState extends State<HomeScreen> {
           return Container(
             margin: const EdgeInsets.only(bottom: 8),
             child: _buildPierreCard(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -989,17 +1225,24 @@ class _HomeScreenState extends State<HomeScreen> {
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
-                              decoration: comprado ? TextDecoration.lineThrough : null,
+                              decoration:
+                                  comprado ? TextDecoration.lineThrough : null,
                             ),
                           ),
-                          Text('Est: ${_formatMoney((item['valor'] as num).toDouble())}', style: const TextStyle(fontSize: 10, color: GideonAssistenteApp.subtext)),
+                          Text(
+                              'Est: ${_formatMoney((item['valor'] as num).toDouble())}',
+                              style: const TextStyle(
+                                  fontSize: 10,
+                                  color: GideonAssistenteApp.subtext)),
                         ],
                       ),
                     ],
                   ),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 16, color: GideonAssistenteApp.subtext),
-                    onPressed: () => setState(() => _listaCompras.removeAt(idx)),
+                    icon: const Icon(Icons.delete_outline,
+                        size: 16, color: GideonAssistenteApp.subtext),
+                    onPressed: () =>
+                        setState(() => _listaCompras.removeAt(idx)),
                   ),
                 ],
               ),
@@ -1014,24 +1257,32 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Contas & Vencimentos', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+        const Text('Contas & Vencimentos',
+            style: TextStyle(
+                fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
         const SizedBox(height: 12),
-
         _buildPierreCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Agendar Conta', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+              const Text('Agendar Conta',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white)),
               const SizedBox(height: 10),
               TextField(
                 controller: _contaNomeController,
                 style: const TextStyle(fontSize: 12, color: Colors.white),
                 decoration: InputDecoration(
                   hintText: 'Descrição (ex: Luz, Aluguel)',
-                  hintStyle: const TextStyle(color: GideonAssistenteApp.subtext),
+                  hintStyle:
+                      const TextStyle(color: GideonAssistenteApp.subtext),
                   filled: true,
                   fillColor: Colors.white.withOpacity(0.05),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none),
                 ),
               ),
               const SizedBox(height: 8),
@@ -1040,14 +1291,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     child: TextField(
                       controller: _contaValorController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      style:
+                          const TextStyle(fontSize: 12, color: Colors.white),
                       decoration: InputDecoration(
                         hintText: 'Valor (R\$)',
-                        hintStyle: const TextStyle(color: GideonAssistenteApp.subtext),
+                        hintStyle: const TextStyle(
+                            color: GideonAssistenteApp.subtext),
                         filled: true,
                         fillColor: Colors.white.withOpacity(0.05),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none),
                       ),
                     ),
                   ),
@@ -1055,13 +1311,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     child: TextField(
                       controller: _contaDataController,
-                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                      style:
+                          const TextStyle(fontSize: 12, color: Colors.white),
                       decoration: InputDecoration(
                         hintText: 'Data (10/08)',
-                        hintStyle: const TextStyle(color: GideonAssistenteApp.subtext),
+                        hintStyle: const TextStyle(
+                            color: GideonAssistenteApp.subtext),
                         filled: true,
                         fillColor: Colors.white.withOpacity(0.05),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none),
                       ),
                     ),
                   ),
@@ -1075,29 +1335,38 @@ class _HomeScreenState extends State<HomeScreen> {
                     backgroundColor: Colors.white12,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () {
                     final nome = _contaNomeController.text.trim();
-                    final valor = double.tryParse(_contaValorController.text.replaceAll(',', '.')) ?? 0.0;
+                    final valor = double.tryParse(_contaValorController.text
+                            .replaceAll(',', '.')) ??
+                        0.0;
                     final data = _contaDataController.text.trim();
                     if (nome.isNotEmpty) {
                       setState(() {
-                        _contasVencimento.add({'nome': nome, 'valor': valor, 'vencimento': data, 'paga': false});
+                        _contasVencimento.add({
+                          'nome': nome,
+                          'valor': valor,
+                          'vencimento': data,
+                          'paga': false
+                        });
                         _contaNomeController.clear();
                         _contaValorController.clear();
                         _contaDataController.clear();
                       });
                     }
                   },
-                  child: const Text('Salvar Agendamento', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  child: const Text('Salvar Agendamento',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 12)),
                 ),
               ),
             ],
           ),
         ),
         const SizedBox(height: 12),
-
         ..._contasVencimento.asMap().entries.map((entry) {
           final idx = entry.key;
           final c = entry.value;
@@ -1105,23 +1374,37 @@ class _HomeScreenState extends State<HomeScreen> {
           return Container(
             margin: const EdgeInsets.only(bottom: 8),
             child: _buildPierreCard(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(c['nome'].toString(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                      Text('Vence: ${c['vencimento']}', style: const TextStyle(fontSize: 10, color: GideonAssistenteApp.subtext)),
+                      Text(c['nome'].toString(),
+                          style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white)),
+                      Text('Vence: ${c['vencimento']}',
+                          style: const TextStyle(
+                              fontSize: 10,
+                              color: GideonAssistenteApp.subtext)),
                     ],
                   ),
                   Row(
                     children: [
-                      Text(_formatMoney((c['valor'] as num).toDouble()), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFFB7185))),
+                      Text(_formatMoney((c['valor'] as num).toDouble()),
+                          style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFFB7185))),
                       IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 16, color: GideonAssistenteApp.subtext),
-                        onPressed: () => setState(() => _contasVencimento.removeAt(idx)),
+                        icon: const Icon(Icons.delete_outline,
+                            size: 16, color: GideonAssistenteApp.subtext),
+                        onPressed: () =>
+                            setState(() => _contasVencimento.removeAt(idx)),
                       ),
                     ],
                   ),
@@ -1138,9 +1421,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Objetos & Móveis (Já Possuo)', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+        const Text('Objetos & Móveis (Já Possuo)',
+            style: TextStyle(
+                fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
         const SizedBox(height: 12),
-
         _buildPierreCard(
           child: Column(
             children: [
@@ -1149,13 +1433,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     child: TextField(
                       controller: _possuoController,
-                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                      style:
+                          const TextStyle(fontSize: 12, color: Colors.white),
                       decoration: InputDecoration(
                         hintText: 'Ex: Geladeira, Sofá',
-                        hintStyle: const TextStyle(color: GideonAssistenteApp.subtext),
+                        hintStyle: const TextStyle(
+                            color: GideonAssistenteApp.subtext),
                         filled: true,
                         fillColor: Colors.white.withOpacity(0.05),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none),
                       ),
                     ),
                   ),
@@ -1164,7 +1452,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF10B981),
                       foregroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: () {
                       if (_possuoController.text.trim().isNotEmpty) {
@@ -1174,7 +1463,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         });
                       }
                     },
-                    child: const Text('Adicionar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    child: const Text('Adicionar',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
                 ],
               ),
@@ -1182,7 +1473,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 12),
-
         ..._jaPossuo.asMap().entries.map((entry) {
           final idx = entry.key;
           final item = entry.value;
@@ -1190,13 +1480,17 @@ class _HomeScreenState extends State<HomeScreen> {
           return Container(
             margin: const EdgeInsets.only(bottom: 8),
             child: _buildPierreCard(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('✔️ $item', style: const TextStyle(fontSize: 12, color: Colors.white)),
+                  Text('✔️ $item',
+                      style:
+                          const TextStyle(fontSize: 12, color: Colors.white)),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 16, color: GideonAssistenteApp.subtext),
+                    icon: const Icon(Icons.delete_outline,
+                        size: 16, color: GideonAssistenteApp.subtext),
                     onPressed: () => setState(() => _jaPossuo.removeAt(idx)),
                   ),
                 ],
@@ -1223,21 +1517,29 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: const Icon(Icons.close, color: Colors.white),
                     onPressed: () => setState(() => _isChatOverlayOpen = false),
                   ),
-                  const Column(
-                    children: [
-                      Text('Gideon IA', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white)),
-                      Text('Visão Computacional & Finanças', style: TextStyle(fontSize: 10, color: GideonAssistenteApp.subtext)),
+                  Column(
+                    children: const [
+                      Text('Gideon IA',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Colors.white)),
+                      Text('Visão Computacional & Finanças',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: GideonAssistenteApp.subtext)),
                     ],
                   ),
                   TextButton(
                     onPressed: () => setState(() => _chatMsgs.clear()),
-                    child: const Text('Limpar', style: TextStyle(color: GideonAssistenteApp.subtext, fontSize: 12)),
+                    child: const Text('Limpar',
+                        style: TextStyle(
+                            color: GideonAssistenteApp.subtext, fontSize: 12)),
                   ),
                 ],
               ),
             ),
             const Divider(color: Colors.white10, height: 1),
-
             Expanded(
               child: ListView(
                 controller: _scrollChatController,
@@ -1250,19 +1552,27 @@ class _HomeScreenState extends State<HomeScreen> {
                           width: 64,
                           height: 64,
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(colors: [Color(0xFF1E293B), Color(0xFF0F172A)]),
+                            gradient: const LinearGradient(
+                                colors: [Color(0xFF1E293B), Color(0xFF0F172A)]),
                             borderRadius: BorderRadius.circular(24),
                             border: Border.all(color: Colors.white12),
                           ),
                           child: const Center(
-                            child: Icon(Icons.smart_toy, color: GideonAssistenteApp.neonLime, size: 36),
+                            child: Icon(Icons.smart_toy,
+                                color: GideonAssistenteApp.neonLime, size: 36),
                           ),
                         ),
                         const SizedBox(height: 12),
-                        const Text('Olá, Taylane', style: TextStyle(fontSize: 20, fontWeight: FontWeight.extrabold, color: Colors.white)),
-                        const Text('Como posso te ajudar hoje?', style: TextStyle(fontSize: 12, color: GideonAssistenteApp.subtext)),
+                        const Text('Olá, Taylane',
+                            style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white)),
+                        const Text('Como posso te ajudar hoje?',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: GideonAssistenteApp.subtext)),
                         const SizedBox(height: 16),
-
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
@@ -1271,9 +1581,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             _buildChatPromptChip('Meu saldo é '),
                             _buildChatPromptChip('Gastei R\$ '),
                             ActionChip(
-                              backgroundColor: GideonAssistenteApp.neonLime.withOpacity(0.1),
-                              side: BorderSide(color: GideonAssistenteApp.neonLime.withOpacity(0.3)),
-                              label: const Text('📷 Ler print de PIX', style: TextStyle(color: GideonAssistenteApp.neonLime, fontSize: 11)),
+                              backgroundColor: GideonAssistenteApp.neonLime
+                                  .withOpacity(0.1),
+                              side: BorderSide(
+                                  color: GideonAssistenteApp.neonLime
+                                      .withOpacity(0.3)),
+                              label: const Text('📷 Ler print de PIX',
+                                  style: TextStyle(
+                                      color: GideonAssistenteApp.neonLime,
+                                      fontSize: 11)),
                               onPressed: _simularLeituraPrint,
                             ),
                           ],
@@ -1282,19 +1598,24 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-
                   ..._chatMsgs.map((msg) {
                     final isUser = msg['autor'] == 'user';
                     return Align(
-                      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                      alignment: isUser
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
                       child: Container(
                         margin: const EdgeInsets.symmetric(vertical: 4),
                         padding: const EdgeInsets.all(12),
                         constraints: const BoxConstraints(maxWidth: 300),
                         decoration: BoxDecoration(
-                          color: isUser ? GideonAssistenteApp.neonLime : GideonAssistenteApp.cardBg,
+                          color: isUser
+                              ? GideonAssistenteApp.neonLime
+                              : GideonAssistenteApp.cardBg,
                           borderRadius: BorderRadius.circular(16),
-                          border: isUser ? null : Border.all(color: Colors.white10),
+                          border: isUser
+                              ? null
+                              : Border.all(color: Colors.white10),
                         ),
                         child: Text(
                           msg['texto'] ?? '',
@@ -1309,26 +1630,31 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-
             Padding(
               padding: const EdgeInsets.all(12.0),
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.camera_alt_outlined, color: Colors.white70),
+                    icon: const Icon(Icons.camera_alt_outlined,
+                        color: Colors.white70),
                     onPressed: _simularLeituraPrint,
                   ),
                   Expanded(
                     child: TextField(
                       controller: _chatController,
-                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                      style:
+                          const TextStyle(fontSize: 12, color: Colors.white),
                       decoration: InputDecoration(
                         hintText: 'Envie uma mensagem...',
-                        hintStyle: const TextStyle(color: GideonAssistenteApp.subtext),
+                        hintStyle: const TextStyle(
+                            color: GideonAssistenteApp.subtext),
                         filled: true,
                         fillColor: Colors.white.withOpacity(0.05),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
                       ),
                       onSubmitted: _processarMensagemUser,
                     ),
@@ -1344,7 +1670,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: GideonAssistenteApp.neonLime,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: const Icon(Icons.send, color: Colors.black, size: 18),
+                      child: const Icon(Icons.send,
+                          color: Colors.black, size: 18),
                     ),
                   ),
                 ],
@@ -1360,7 +1687,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return ActionChip(
       backgroundColor: Colors.white.withOpacity(0.05),
       side: BorderSide(color: Colors.white.withOpacity(0.1)),
-      label: Text(text, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+      label: Text(text,
+          style: const TextStyle(color: Colors.white70, fontSize: 11)),
       onPressed: () {
         _chatController.text = text;
       },
@@ -1373,7 +1701,8 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: GideonAssistenteApp.cardBg,
-        title: const Text('Editar Saldo em Contas', style: TextStyle(color: Colors.white, fontSize: 14)),
+        title: const Text('Editar Saldo em Contas',
+            style: TextStyle(color: Colors.white, fontSize: 14)),
         content: TextField(
           controller: _editSaldoController,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1381,12 +1710,18 @@ class _HomeScreenState extends State<HomeScreen> {
           decoration: const InputDecoration(border: OutlineInputBorder()),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: GideonAssistenteApp.neonLime, foregroundColor: Colors.black),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: GideonAssistenteApp.neonLime,
+                foregroundColor: Colors.black),
             onPressed: () {
               setState(() {
-                _saldoEmContas = double.tryParse(_editSaldoController.text) ?? _saldoEmContas;
+                _saldoEmContas =
+                    double.tryParse(_editSaldoController.text) ??
+                        _saldoEmContas;
               });
               Navigator.pop(ctx);
             },
@@ -1403,7 +1738,8 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: GideonAssistenteApp.cardBg,
-        title: const Text('Editar Gastos do Mês', style: TextStyle(color: Colors.white, fontSize: 14)),
+        title: const Text('Editar Gastos do Mês',
+            style: TextStyle(color: Colors.white, fontSize: 14)),
         content: TextField(
           controller: _editGastadoController,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1411,12 +1747,17 @@ class _HomeScreenState extends State<HomeScreen> {
           decoration: const InputDecoration(border: OutlineInputBorder()),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: GideonAssistenteApp.neonLime, foregroundColor: Colors.black),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: GideonAssistenteApp.neonLime,
+                foregroundColor: Colors.black),
             onPressed: () {
               setState(() {
-                _gastosMesManual = double.tryParse(_editGastadoController.text);
+                _gastosMesManual =
+                    double.tryParse(_editGastadoController.text);
               });
               Navigator.pop(ctx);
             },
@@ -1433,24 +1774,33 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: GideonAssistenteApp.cardBg,
-        title: const Text('Configurar Chave Gemini API', style: TextStyle(color: Colors.white, fontSize: 14)),
+        title: const Text('Configurar Chave Gemini API',
+            style: TextStyle(color: Colors.white, fontSize: 14)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Cole sua chave do Google AI Studio para ativar o leitor de prints:', style: TextStyle(color: GideonAssistenteApp.subtext, fontSize: 11)),
+            const Text(
+                'Cole sua chave do Google AI Studio para ativar o leitor de prints:',
+                style: TextStyle(
+                    color: GideonAssistenteApp.subtext, fontSize: 11)),
             const SizedBox(height: 8),
             TextField(
               controller: _apiKeyController,
               style: const TextStyle(color: Colors.white, fontSize: 12),
-              decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'AIzaSy...'),
+              decoration: const InputDecoration(
+                  border: OutlineInputBorder(), hintText: 'AIzaSy...'),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: GideonAssistenteApp.neonLime, foregroundColor: Colors.black),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: GideonAssistenteApp.neonLime,
+                foregroundColor: Colors.black),
             onPressed: () {
               setState(() {
                 _geminiApiKey = _apiKeyController.text.trim();
@@ -1469,20 +1819,26 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: GideonAssistenteApp.cardBg,
-        title: const Text('Importar Extrato Bancário (.OFX/.CSV)', style: TextStyle(color: Colors.white, fontSize: 14)),
+        title: const Text('Importar Extrato Bancário (.OFX/.CSV)',
+            style: TextStyle(color: Colors.white, fontSize: 14)),
         content: TextField(
           controller: _ofxTextController,
           maxLines: 5,
           style: const TextStyle(color: Colors.white, fontSize: 11),
           decoration: const InputDecoration(
-            hintText: 'Cole o conteúdo do arquivo .OFX ou .CSV do seu banco...',
+            hintText:
+                'Cole o conteúdo do arquivo .OFX ou .CSV do seu banco...',
             border: OutlineInputBorder(),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF34D399), foregroundColor: Colors.black),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF34D399),
+                foregroundColor: Colors.black),
             onPressed: () {
               final raw = _ofxTextController.text;
               if (raw.isNotEmpty) {
@@ -1510,8 +1866,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void _simularLeituraPrint() {
     setState(() {
       _isChatOverlayOpen = true;
-      _chatMsgs.add({'autor': 'user', 'texto': '📷 [Print do PIX de R\$ 35,00 em Padaria]'});
-      _chatMsgs.add({'autor': 'bot', 'texto': '📸 Leitura do print com Gemini: Detectado PIX de R\$ 35,00 em Padaria. Lançado com sucesso!'});
+      _chatMsgs
+          .add({'autor': 'user', 'texto': '📷 [Print do PIX de R\$ 35,00 em Padaria]'});
+      _chatMsgs.add({
+        'autor': 'bot',
+        'texto':
+            '📸 Leitura do print com Gemini: Detectado PIX de R\$ 35,00 em Padaria. Lançado com sucesso!'
+      });
       _despesas.insert(0, {
         'desc': 'Padaria (Print PIX)',
         'category': 'Alimentação',
