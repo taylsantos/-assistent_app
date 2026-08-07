@@ -1,2247 +1,1111 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const GideonAssistenteApp());
+  runApp(const GideonApp());
 }
 
-class GideonAssistenteApp extends StatelessWidget {
-  const GideonAssistenteApp({super.key});
-
-  static const Color darkBg = Color(0xFF090A0F);
-  static const Color cardBg = Color(0xFF13151C);
-  static const Color cardBorder = Color(0xFF222634);
-  static const Color neonLime = Color(0xFFCCFF00);
-  static const Color subtext = Color(0xFF8E96A8);
+class GideonApp extends StatelessWidget {
+  const GideonApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Gideon • Finanças & Assistente IA',
+      title: 'Gideon Financial Assistant',
       debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.dark,
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: darkBg,
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF0D0F12),
+        primaryColor: const Color(0xFFCCFF00),
+        cardColor: const Color(0xFF151821),
         colorScheme: const ColorScheme.dark(
-          surface: cardBg,
-          primary: neonLime,
-          onPrimary: Colors.black,
-          secondary: Color(0xFF38BDF8),
+          primary: Color(0xFFCCFF00),
+          secondary: Color(0xFF00FF88),
+          surface: Color(0xFF151821),
+          error: Color(0xFFFF4444),
         ),
-        fontFamily: 'Plus Jakarta Sans',
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: const Color(0xFF0D0F12),
+          hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: Color(0xFF232734)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: Color(0xFF232734)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: Color(0xFFCCFF00)),
+          ),
+        ),
       ),
-      home: const HomeScreen(),
+      home: const MainHomeScreen(),
     );
   }
 }
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class TransactionItem {
+  final String id;
+  final String title;
+  final double value;
+  final String category;
+  final String date;
 
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  TransactionItem({
+    required this.id,
+    required this.title,
+    required this.value,
+    required this.category,
+    required this.date,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'value': value,
+        'category': category,
+        'date': date,
+      };
+
+  factory TransactionItem.fromJson(Map<String, dynamic> json) => TransactionItem(
+        id: json['id']?.toString() ?? '',
+        title: json['title']?.toString() ?? '',
+        value: (json['value'] is num) ? (json['value'] as num).toDouble() : 0.0,
+        category: json['category']?.toString() ?? 'Geral',
+        date: json['date']?.toString() ?? '',
+      );
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  int _currentTab = 0;
+class GroceryItem {
+  final String id;
+  final String name;
+  final double price;
+  final int quantity;
 
-  double _saldoEmContas = 0.00;
-  double? _gastosMesManual;
-  bool _ocultarValores = false;
-  bool _isChatOverlayOpen = false;
-  String _geminiApiKey = 'AIzaSyDrAG2Zg4Gc-uOkwMiBRRVVeDlYwKG80cc';
+  GroceryItem({
+    required this.id,
+    required this.name,
+    required this.price,
+    this.quantity = 1,
+  });
 
-  final List<Map<String, dynamic>> _despesas = [];
-  final List<Map<String, dynamic>> _listaCompras = [];
-  final List<Map<String, dynamic>> _contasVencimento = [];
-  final List<String> _jaPossuo = [];
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'price': price,
+        'quantity': quantity,
+      };
+
+  factory GroceryItem.fromJson(Map<String, dynamic> json) => GroceryItem(
+        id: json['id']?.toString() ?? '',
+        name: json['name']?.toString() ?? '',
+        price: (json['price'] is num) ? (json['price'] as num).toDouble() : 0.0,
+        quantity: (json['quantity'] is num) ? (json['quantity'] as num).toInt() : 1,
+      );
+}
+
+class BillItem {
+  final String id;
+  final String title;
+  final double amount;
+  final String dueDate;
+  final bool isPaid;
+
+  BillItem({
+    required this.id,
+    required this.title,
+    required this.amount,
+    required this.dueDate,
+    this.isPaid = false,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'amount': amount,
+        'dueDate': dueDate,
+        'isPaid': isPaid,
+      };
+
+  factory BillItem.fromJson(Map<String, dynamic> json) => BillItem(
+        id: json['id']?.toString() ?? '',
+        title: json['title']?.toString() ?? '',
+        amount: (json['amount'] is num) ? (json['amount'] as num).toDouble() : 0.0,
+        dueDate: json['dueDate']?.toString() ?? '',
+        isPaid: json['isPaid'] == true,
+      );
+}
+
+class OwnedItem {
+  final String id;
+  final String name;
+  final String category;
+
+  OwnedItem({
+    required this.id,
+    required this.name,
+    required this.category,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'category': category,
+      };
+
+  factory OwnedItem.fromJson(Map<String, dynamic> json) => OwnedItem(
+        id: json['id']?.toString() ?? '',
+        name: json['name']?.toString() ?? '',
+        category: json['category']?.toString() ?? 'Outros',
+      );
+}
+
+class MainHomeScreen extends StatefulWidget {
+  const MainHomeScreen({super.key});
+
+  @override
+  State<MainHomeScreen> createState() => _MainHomeScreenState();
+}
+
+class _MainHomeScreenState extends State<MainHomeScreen> {
+  int _selectedTabIndex = 0;
+
+  // Estado zerado por padrão
+  double saldo = 0.0;
+  double gastos = 0.0;
+  double fatura = 0.0;
+
+  List<TransactionItem> transacoes = [];
+  List<GroceryItem> compras = [];
+  List<BillItem> contas = [];
+  List<OwnedItem> possuo = [];
 
   final TextEditingController _chatController = TextEditingController();
-  final ScrollController _scrollChatController = ScrollController();
+  final TextEditingController _groceryNameCtrl = TextEditingController();
+  final TextEditingController _groceryPriceCtrl = TextEditingController();
+  final TextEditingController _billTitleCtrl = TextEditingController();
+  final TextEditingController _billAmountCtrl = TextEditingController();
+  final TextEditingController _ownedNameCtrl = TextEditingController();
 
-  final TextEditingController _comprarNomeController = TextEditingController();
-  final TextEditingController _comprarValorController = TextEditingController();
-
-  final TextEditingController _contaNomeController = TextEditingController();
-  final TextEditingController _contaValorController = TextEditingController();
-  final TextEditingController _contaDataController = TextEditingController();
-
-  final TextEditingController _possuoController = TextEditingController();
-
-  final TextEditingController _editSaldoController = TextEditingController();
-  final TextEditingController _editGastadoController = TextEditingController();
-  final TextEditingController _apiKeyController = TextEditingController();
-  final TextEditingController _ofxTextController = TextEditingController();
-
-  final List<Map<String, String>> _chatMsgs = [];
+  final List<Map<String, String>> messages = [
+    {
+      'sender': 'bot',
+      'text': 'Olá! Sou a Gideon. Todos os valores foram zerados. Como posso te ajudar hoje?'
+    }
+  ];
 
   @override
   void initState() {
     super.initState();
-    _carregarDadosPersistidos();
+    _loadData();
   }
 
   @override
   void dispose() {
     _chatController.dispose();
-    _scrollChatController.dispose();
-    _comprarNomeController.dispose();
-    _comprarValorController.dispose();
-    _contaNomeController.dispose();
-    _contaValorController.dispose();
-    _contaDataController.dispose();
-    _possuoController.dispose();
-    _editSaldoController.dispose();
-    _editGastadoController.dispose();
-    _apiKeyController.dispose();
-    _ofxTextController.dispose();
+    _groceryNameCtrl.dispose();
+    _groceryPriceCtrl.dispose();
+    _billTitleCtrl.dispose();
+    _billAmountCtrl.dispose();
+    _ownedNameCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _carregarDadosPersistidos() async {
+  Future<void> _loadData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
       setState(() {
-        _geminiApiKey = prefs.getString('gemini_api_key') ??
-            'AIzaSyDrAG2Zg4Gc-uOkwMiBRRVVeDlYwKG80cc';
-        _saldoEmContas = prefs.getDouble('saldo_em_contas') ?? 0.0;
-        final despesasRaw = prefs.getString('despesas_list');
-        if (despesasRaw != null) {
-          _despesas.clear();
-          _despesas
-              .addAll(List<Map<String, dynamic>>.from(json.decode(despesasRaw)));
-        }
-        final comprasRaw = prefs.getString('compras_list');
-        if (comprasRaw != null) {
-          _listaCompras.clear();
-          _listaCompras
-              .addAll(List<Map<String, dynamic>>.from(json.decode(comprasRaw)));
-        }
-        final contasRaw = prefs.getString('contas_list');
-        if (contasRaw != null) {
-          _contasVencimento.clear();
-          _contasVencimento
-              .addAll(List<Map<String, dynamic>>.from(json.decode(contasRaw)));
-        }
-        final possuoRaw = prefs.getString('possuo_list');
-        if (possuoRaw != null) {
-          _jaPossuo.clear();
-          _jaPossuo.addAll(List<String>.from(json.decode(possuoRaw)));
+        saldo = prefs.getDouble('saldo') ?? 0.0;
+        gastos = prefs.getDouble('gastos') ?? 0.0;
+        fatura = prefs.getDouble('fatura') ?? 0.0;
+
+        String? txStr = prefs.getString('transacoes');
+        if (txStr != null) {
+          List<dynamic> l = jsonDecode(txStr);
+          transacoes = l
+              .map((e) => TransactionItem.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList();
         }
 
-        _gerarMensagemBoasVindasComAlertas();
+        String? compStr = prefs.getString('compras');
+        if (compStr != null) {
+          List<dynamic> l = jsonDecode(compStr);
+          compras = l
+              .map((e) => GroceryItem.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList();
+        }
+
+        String? cntStr = prefs.getString('contas');
+        if (cntStr != null) {
+          List<dynamic> l = jsonDecode(cntStr);
+          contas = l
+              .map((e) => BillItem.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList();
+        }
+
+        String? posStr = prefs.getString('possuo');
+        if (posStr != null) {
+          List<dynamic> l = jsonDecode(posStr);
+          possuo = l
+              .map((e) => OwnedItem.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList();
+        }
       });
-    } catch (_) {
-      _gerarMensagemBoasVindasComAlertas();
-    }
-  }
-
-  void _gerarMensagemBoasVindasComAlertas() {
-    String alertaTexto =
-        'Olá, Taylane! Sou a Gideon 🌐. Como posso te ajudar com suas finanças hoje?';
-
-    final contasPendentes =
-        _contasVencimento.where((c) => c['paga'] != true).toList();
-    if (contasPendentes.isNotEmpty) {
-      alertaTexto +=
-          '\n\n🚨 *Alerta Proativo:* Você tem ${contasPendentes.length} conta(s) pendente(s) agendada(s).';
-    }
-
-    if (_saldoEmContas > 0 && _gastosMesFinal > (_saldoEmContas * 0.8)) {
-      alertaTexto +=
-          '\n\n⚠️ *Alerta de Orçamento:* Seus gastos do mês ultrapassaram 80% do seu saldo disponível!';
-    }
-
-    if (_chatMsgs.isEmpty) {
-      _chatMsgs.add({'autor': 'bot', 'texto': alertaTexto});
-    }
-  }
-
-  Future<void> _salvarDadosPersistidos() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('gemini_api_key', _geminiApiKey);
-      await prefs.setDouble('saldo_em_contas', _saldoEmContas);
-      await prefs.setString('despesas_list', json.encode(_despesas));
-      await prefs.setString('compras_list', json.encode(_listaCompras));
-      await prefs.setString('contas_list', json.encode(_contasVencimento));
-      await prefs.setString('possuo_list', json.encode(_jaPossuo));
     } catch (_) {}
   }
 
-  double get _totalCalculadoDespesas {
-    double sum = 0;
-    for (var d in _despesas) {
-      sum += (d['amount'] as num).toDouble();
-    }
-    for (var c in _listaCompras) {
-      if (c['comprado'] == true) {
-        sum += (c['valor'] as num).toDouble();
-      }
-    }
-    return sum;
+  Future<void> _saveData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble('saldo', saldo);
+      await prefs.setDouble('gastos', gastos);
+      await prefs.setDouble('fatura', fatura);
+      await prefs.setString('transacoes', jsonEncode(transacoes.map((e) => e.toJson()).toList()));
+      await prefs.setString('compras', jsonEncode(compras.map((e) => e.toJson()).toList()));
+      await prefs.setString('contas', jsonEncode(contas.map((e) => e.toJson()).toList()));
+      await prefs.setString('possuo', jsonEncode(possuo.map((e) => e.toJson()).toList()));
+    } catch (_) {}
   }
 
-  double get _gastosMesFinal => _gastosMesManual ?? _totalCalculadoDespesas;
-
-  double get _totalComprasEstimado {
-    double sum = 0;
-    for (var c in _listaCompras) {
-      sum += (c['valor'] as num).toDouble();
-    }
-    return sum;
-  }
-
-  double get _totalComprasConcluidas {
-    double sum = 0;
-    for (var c in _listaCompras) {
-      if (c['comprado'] == true) {
-        sum += (c['valor'] as num).toDouble();
-      }
-    }
-    return sum;
-  }
-
-  Widget _buildPierreCard({
-    required Widget child,
-    EdgeInsetsGeometry padding = const EdgeInsets.all(16),
-    VoidCallback? onTap,
-    Color? borderColor,
-  }) {
-    final cardWidget = Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: GideonAssistenteApp.cardBg,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: borderColor ?? Colors.white.withValues(alpha: 0.08),
-          width: 1,
-        ),
+  void _resetAll() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF151821),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Zerar Todos os Dados?'),
+        content: const Text('Esta ação apagará todas as transações, listas de compras, contas a vencer e inventário.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () {
+              setState(() {
+                saldo = 0.0;
+                gastos = 0.0;
+                fatura = 0.0;
+                transacoes.clear();
+                compras.clear();
+                contas.clear();
+                possuo.clear();
+              });
+              _saveData();
+              Navigator.pop(ctx);
+            },
+            child: const Text('Zerar Tudo', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
-      child: child,
     );
-
-    if (onTap != null) {
-      return InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
-        child: cardWidget,
-      );
-    }
-    return cardWidget;
   }
 
-  String _formatMoney(double val) {
-    if (_ocultarValores) return '••••••';
-    return 'R\$ ${val.toStringAsFixed(2).replaceAll('.', ',')}';
-  }
-
-  void _processarMensagemUser(String input) {
-    if (input.trim().isEmpty) return;
-    final text = input.trim();
+  void _sendMessage() {
+    String text = _chatController.text.trim();
+    if (text.isEmpty) return;
 
     setState(() {
-      _chatMsgs.add({'autor': 'user', 'texto': text});
+      messages.add({'sender': 'user', 'text': text});
       _chatController.clear();
     });
 
-    final lower = text.toLowerCase();
-
-    // --- OPÇÃO 3: CONSULTAS E RELATÓRIOS CONVERSACIONAIS LOCAIS ---
-    if (lower.contains('quanto gastei') ||
-        lower.contains('resumo') ||
-        lower.contains('relatorio') ||
-        lower.contains('relatório') ||
-        lower.contains('extrato')) {
-      final String report = _gerarRelatorioConversacional();
-      setState(() {
-        _chatMsgs.add({'autor': 'bot', 'texto': report});
-      });
-      _scrollToBottomChat();
-      return;
-    }
-
-    if (lower.contains('contas') || lower.contains('vencer') || lower.contains('vencimento')) {
-      final String contasReport = _gerarRelatorioContas();
-      setState(() {
-        _chatMsgs.add({'autor': 'bot', 'texto': contasReport});
-      });
-      _scrollToBottomChat();
-      return;
-    }
-
-    if (lower.contains('fatura') || lower.contains('cartao') || lower.contains('cartão')) {
-      final double faturaEstimada = _gastosMesFinal * 1.2;
-      setState(() {
-        _chatMsgs.add({
-          'autor': 'bot',
-          'texto':
-              '💳 *Consulta de Fatura:*\n\nSua fatura estimada atual é de *${_formatMoney(faturaEstimada)}* com vencimento próximo.'
-        });
-      });
-      _scrollToBottomChat();
-      return;
-    }
-
-    // Ajuste de Saldo
-    final matchSaldo = RegExp(
-            r'(?:saldo\s+(?:é|e)|saldo\s+de|tenho|guardei|guardado|guardados)\s*R?\$?\s*([\d\.,]+)',
-            caseSensitive: false)
-        .firstMatch(lower);
-
-    if (matchSaldo != null) {
-      final valStr =
-          matchSaldo.group(1)!.replaceAll('.', '').replaceAll(',', '.');
-      final val = double.tryParse(valStr) ?? 0.0;
-      setState(() {
-        _saldoEmContas = val;
-        _chatMsgs.add({
-          'autor': 'bot',
-          'texto':
-              '✅ Saldo em contas ajustado para ${_formatMoney(val)}!'
-        });
-      });
-      _salvarDadosPersistidos();
-      _scrollToBottomChat();
-      return;
-    }
-
-    // Lançamento de Gasto
-    final matchGasto = RegExp(
-            r'(?:gastei|paguei|comprei)\s*R?\$?\s*([\d\.,]+)\s*(?:com|no|na|em)?\s*(.*)',
-            caseSensitive: false)
-        .firstMatch(lower);
-    if (matchGasto != null) {
-      final valStr =
-          matchGasto.group(1)!.replaceAll('.', '').replaceAll(',', '.');
-      final val = double.tryParse(valStr) ?? 0.0;
-      final desc = matchGasto.group(2)?.trim().isNotEmpty == true
-          ? matchGasto.group(2)!.trim()
-          : 'Gasto Rápido';
-      setState(() {
-        _despesas.insert(0, {
-          'desc': desc,
-          'category': 'Geral',
-          'amount': val,
-          'date': 'Hoje',
-          'banco': 'Nubank',
-          'pago': true,
-        });
-        _chatMsgs.add({
-          'autor': 'bot',
-          'texto':
-              '💸 Lançado ${_formatMoney(val)} em "$desc"! Seu saldo e gráficos foram atualizados.'
-        });
-      });
-      _salvarDadosPersistidos();
-      _scrollToBottomChat();
-      return;
-    }
-
-    if (_geminiApiKey.isNotEmpty) {
-      _chamarGeminiAPI(text);
-    } else {
-      setState(() {
-        _chatMsgs.add({
-          'autor': 'bot',
-          'texto':
-              '🌐 Registrado localmente! Adicione sua chave API no topo para análises avançadas do Gemini.'
-        });
-      });
-      _scrollToBottomChat();
-    }
+    _processLocalAI(text);
   }
 
-  String _gerarRelatorioConversacional() {
-    final total = _gastosMesFinal;
-    final saldo = _saldoEmContas;
-    final reservada = total * 0.15;
+  void _processLocalAI(String input) {
+    String lower = input.toLowerCase();
+    RegExp numRegex = RegExp(r'\d+([.,]\d+)?');
+    var match = numRegex.firstMatch(input);
+    double val = match != null ? double.parse(match.group(0)!.replaceAll(',', '.')) : 0.0;
 
-    Map<String, double> porCategoria = {};
-    for (var d in _despesas) {
-      final cat = d['category']?.toString() ?? 'Geral';
-      final amt = (d['amount'] as num).toDouble();
-      porCategoria[cat] = (porCategoria[cat] ?? 0) + amt;
-    }
+    String reply = "";
 
-    String catResumo = '';
-    porCategoria.forEach((cat, val) {
-      catResumo += '• *$cat*: ${_formatMoney(val)}\n';
-    });
-
-    if (catResumo.isEmpty) catResumo = 'Nenhuma categoria com gastos ainda.\n';
-
-    return '📊 *Resumo Executivo do Mês:*\n\n'
-        '💰 *Saldo Atual:* ${_formatMoney(saldo)}\n'
-        '💸 *Total de Gastos do Mês:* ${_formatMoney(total)}\n'
-        '🛡️ *Reserva de Imprevisto:* ${_formatMoney(reservada)}\n\n'
-        '📂 *Gastos por Categoria:*\n$catResumo\n'
-        '📌 Total de *${_despesas.length}* transações registradas.';
-  }
-
-  String _gerarRelatorioContas() {
-    if (_contasVencimento.isEmpty) {
-      return '📅 *Contas & Vencimentos:*\n\nNenhuma conta agendada até o momento. Clique na aba *Contas* para adicionar!';
-    }
-
-    double pendenteTotal = 0;
-    String lista = '';
-    for (var c in _contasVencimento) {
-      final bool paga = c['paga'] == true;
-      final double val = (c['valor'] as num).toDouble();
-      if (!paga) pendenteTotal += val;
-
-      lista +=
-          '${paga ? '✅' : '⏰'} *${c['nome']}* - ${_formatMoney(val)} (Vence: ${c['vencimento'] ?? 'A definir'})\n';
-    }
-
-    return '📅 *Relatório de Contas:*\n\n$lista\n❗ *Total Pendente:* ${_formatMoney(pendenteTotal)}';
-  }
-
-  Future<void> _chamarGeminiAPI(String prompt) async {
-    setState(() {
-      _chatMsgs.add({'autor': 'bot', 'texto': '⏳ Gideon está analisando...'});
-    });
-    _scrollToBottomChat();
-
-    final lower = prompt.toLowerCase();
-    String? localInsight;
-
-    if (lower.contains('dica') ||
-        lower.contains('ajuda') ||
-        lower.contains('economizar') ||
-        lower.contains('poupar') ||
-        lower.contains('financeir')) {
-      localInsight =
-          '💡 *Dicas Financeiras Personalizadas da Gideon:*\n\n'
-          '1. **Regra 50/30/20**: Com seus gastos atuais em ${_formatMoney(_gastosMesFinal)}, procure manter 20% guardados.\n'
-          '2. **Reserva de Emergência**: Sugiro manter ao menos ${_formatMoney(_gastosMesFinal * 0.15)} como fundo de imprevistos.\n'
-          '3. **Supermercado Inteligente**: Use a aba *Compras* para controlar o valor dos itens antes do caixa.\n'
-          '4. **Acompanhamento Diário**: Lançar os pequenos gastos diários evita vazamentos de orçamento.';
-    }
-
-    final modelsToTry = [
-      'gemini-1.5-flash',
-      'gemini-1.5-flash-8b',
-      'gemini-1.5-pro',
-    ];
-
-    bool success = false;
-
-    for (var model in modelsToTry) {
-      try {
-        final url = Uri.parse(
-            'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$_geminiApiKey');
-        final response = await http
-            .post(
-              url,
-              headers: {'Content-Type': 'application/json'},
-              body: json.encode({
-                'contents': [
-                  {
-                    'parts': [
-                      {'text': prompt}
-                    ]
-                  }
-                ],
-                'systemInstruction': {
-                  'parts': [
-                    {
-                      'text':
-                          'Você é a Gideon, assistente financeira pessoal da Taylane estilo Pierre. Responda de forma simples, elegante, motivadora e direta em português.'
-                    }
-                  ]
-                }
-              }),
-            )
-            .timeout(const Duration(seconds: 10));
-
-        if (response.statusCode == 200) {
-          final Map<String, dynamic> data =
-              json.decode(response.body) as Map<String, dynamic>;
-          String replyText = 'Sem resposta da IA.';
-          if (data.containsKey('candidates') &&
-              data['candidates'] is List &&
-              (data['candidates'] as List).isNotEmpty) {
-            final cand = data['candidates'][0];
-            if (cand is Map &&
-                cand.containsKey('content') &&
-                cand['content'] is Map) {
-              final content = cand['content'] as Map;
-              if (content.containsKey('parts') &&
-                  content['parts'] is List &&
-                  (content['parts'] as List).isNotEmpty) {
-                final part = content['parts'][0];
-                if (part is Map && part.containsKey('text')) {
-                  replyText = part['text'].toString();
-                }
-              }
-            }
-          }
-          setState(() {
-            _chatMsgs.removeLast();
-            _chatMsgs.add({'autor': 'bot', 'texto': replyText});
-          });
-          success = true;
-          break;
-        }
-      } catch (_) {}
-    }
-
-    if (!success) {
-      final fallbackReply = localInsight ??
-          '💡 *Assistente Gideon:*\n\n'
-          'Todos os seus dados continuam funcionando offline perfeitamente! Digite *"resumo"* para ver seu relatório completo ou *"contas"* para ver pendências.';
-
+    if (lower.contains('gastei') || lower.contains('paguei') || lower.contains('comprei')) {
       setState(() {
-        _chatMsgs.removeLast();
-        _chatMsgs.add({'autor': 'bot', 'texto': fallbackReply});
-      });
-    }
-    _scrollToBottomChat();
-  }
-
-  void _scrollToBottomChat() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollChatController.hasClients) {
-        _scrollChatController.animateTo(
-          _scrollChatController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
+        gastos += val;
+        saldo -= val;
+        transacoes.insert(
+          0,
+          TransactionItem(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            title: input,
+            value: -val,
+            category: _detectCategory(lower),
+            date: 'Hoje',
+          ),
         );
+      });
+      reply = "Entendido! Lancei a despesa de R\$ ${val.toStringAsFixed(2)}. Seu saldo atual é de R\$ ${saldo.toStringAsFixed(2)}.";
+    } else if (lower.contains('saldo') || lower.contains('tenho') || lower.contains('recebi')) {
+      if (val > 0) {
+        setState(() {
+          saldo = val;
+        });
+        reply = "Saldo ajustado para R\$ ${saldo.toStringAsFixed(2)}.";
+      } else {
+        reply = "Seu saldo atual disponível em conta é de R\$ ${saldo.toStringAsFixed(2)}.";
       }
+    } else if (lower.contains('quanto gastei') || lower.contains('resumo') || lower.contains('relatorio')) {
+      reply = "📊 Resumo Financeiro:\n• Saldo em conta: R\$ ${saldo.toStringAsFixed(2)}\n• Gastos do Mês: R\$ ${gastos.toStringAsFixed(2)}\n• Fatura Atual: R\$ ${fatura.toStringAsFixed(2)}";
+    } else if (lower.contains('dica') || lower.contains('conselho')) {
+      reply = saldo <= 0
+          ? "💡 Dica: Seu saldo está zerado. Evite novos compromissos financeiros até registrar novas entradas."
+          : "💡 Dica: Recomendo separar 15% do seu saldo (R\$ ${(saldo * 0.15).toStringAsFixed(2)}) para o seu fundo de imprevistos.";
+    } else {
+      reply = "Entendido! Você pode me pedir para lançar compras, ajustar saldo ou ver seu resumo financeiro a qualquer momento.";
+    }
+
+    _saveData();
+
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() {
+        messages.add({'sender': 'bot', 'text': reply});
+      });
     });
+  }
+
+  String _detectCategory(String text) {
+    if (text.contains('mercado') || text.contains('padaria') || text.contains('comida')) return 'Alimentação';
+    if (text.contains('luz') || text.contains('agua') || text.contains('net')) return 'Contas Fixas';
+    if (text.contains('uber') || text.contains('gasolina')) return 'Transporte';
+    return 'Geral';
+  }
+
+  void _showCardDetails(String title, String description, Widget? detailWidget) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF151821),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFCCFF00)),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.grey),
+                  onPressed: () => Navigator.pop(ctx),
+                )
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(description, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+            const SizedBox(height: 20),
+            if (detailWidget != null) detailWidget,
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Stack(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0D0F12),
+        elevation: 0,
+        title: Row(
           children: [
-            Column(
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFCCFF00),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.auto_awesome, color: Colors.black, size: 18),
+            ),
+            const SizedBox(width: 10),
+            const Text('Gideon App', style: TextStyle(color: Color(0xFFCCFF00), fontWeight: FontWeight.bold)),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
+            tooltip: 'Zerar Tudo',
+            onPressed: _resetAll,
+          )
+        ],
+      ),
+      body: Column(
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
               children: [
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1E293B),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.1)),
-                            ),
-                            child: const Center(
-                              child: Icon(Icons.smart_toy,
-                                  color: GideonAssistenteApp.neonLime, size: 24),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Taylane',
-                                style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white),
-                              ),
-                              Text(
-                                'Assistente Pessoal & Finanças',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: GideonAssistenteApp.subtext,
-                                    fontWeight: FontWeight.w500),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          IconButton(
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.white.withValues(alpha: 0.05),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                side: BorderSide(
-                                    color: Colors.white.withValues(alpha: 0.1)),
-                              ),
-                            ),
-                            icon: const Icon(Icons.vpn_key_outlined,
-                                color: GideonAssistenteApp.neonLime, size: 18),
-                            onPressed: _abrirModalChaveApi,
-                            tooltip: 'Configurar Chave API',
-                          ),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.white.withValues(alpha: 0.05),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                side: BorderSide(
-                                    color: Colors.white.withValues(alpha: 0.1)),
-                              ),
-                            ),
-                            icon: Icon(
-                              _ocultarValores
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                              color: _ocultarValores
-                                  ? const Color(0xFFFB7185)
-                                  : Colors.white70,
-                              size: 18,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _ocultarValores = !_ocultarValores;
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Row(
-                    children: [
-                      _buildNavPill(0, 'Início', Icons.pie_chart_outline),
-                      const SizedBox(width: 8),
-                      _buildNavPill(1, 'Atividades', Icons.list_alt),
-                      const SizedBox(width: 8),
-                      _buildNavPill(
-                          2, 'Compras Supermercado', Icons.shopping_cart_outlined),
-                      const SizedBox(width: 8),
-                      _buildNavPill(
-                          3, 'Contas', Icons.calendar_today_outlined),
-                      const SizedBox(width: 8),
-                      _buildNavPill(4, 'Já Possuo', Icons.inventory_2_outlined),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
-                    child: Center(
-                      child: Container(
-                        constraints: const BoxConstraints(maxWidth: 500),
-                        child: Column(
-                          children: [
-                            if (_currentTab == 0) _buildTabDashboard(),
-                            if (_currentTab == 1) _buildTabAtividades(),
-                            if (_currentTab == 2) _buildTabCompras(),
-                            if (_currentTab == 3) _buildTabContas(),
-                            if (_currentTab == 4) _buildTabPossuo(),
-                            const SizedBox(height: 100),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+                _buildTabChip(0, 'Início', Icons.home),
+                _buildTabChip(1, 'Atividades', Icons.list_alt),
+                _buildTabChip(2, 'Compras Supermercado', Icons.shopping_cart),
+                _buildTabChip(3, 'Contas', Icons.calendar_today),
+                _buildTabChip(4, 'Já Possuo', Icons.inventory_2),
               ],
             ),
-            Positioned(
-              left: 16,
-              right: 16,
-              bottom: 16,
-              child: Center(
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: 500),
-                  child: _buildPierreCard(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    borderColor: Colors.white.withValues(alpha: 0.12),
-                    onTap: () {
-                      setState(() {
-                        _isChatOverlayOpen = true;
-                      });
-                    },
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: const Color(0x22CCFF00),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(Icons.qr_code_scanner,
-                                  color: GideonAssistenteApp.neonLime,
-                                  size: 16),
-                            ),
-                            const SizedBox(width: 10),
-                            const Text(
-                              'Pergunte à Gideon...',
-                              style: TextStyle(
-                                  fontSize: 13,
-                                  color: GideonAssistenteApp.subtext,
-                                  fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.camera_alt_outlined,
-                                  color: Colors.white70, size: 18),
-                              onPressed: _simularLeituraPrint,
-                              tooltip: 'Ler Print de PIX',
-                            ),
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: GideonAssistenteApp.neonLime,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(Icons.arrow_upward,
-                                  color: Colors.black, size: 16),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+          ),
+          Expanded(
+            child: IndexedStack(
+              index: _selectedTabIndex,
+              children: [
+                _buildInicioTab(),
+                _buildAtividadesTab(),
+                _buildComprasTab(),
+                _buildContasTab(),
+                _buildPossuoTab(),
+              ],
             ),
-            if (_isChatOverlayOpen) _buildChatOverlayModal(),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildNavPill(int index, String label, IconData icon) {
-    final isSelected = _currentTab == index;
-    return ElevatedButton.icon(
-      style: ElevatedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        backgroundColor: isSelected
-            ? GideonAssistenteApp.neonLime
-            : Colors.white.withValues(alpha: 0.05),
-        foregroundColor: isSelected ? Colors.black : Colors.white70,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        elevation: 0,
+  Widget _buildTabChip(int index, String label, IconData icon) {
+    bool selected = _selectedTabIndex == index;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8.0),
+      child: ChoiceChip(
+        label: Row(
+          children: [
+            Icon(icon, size: 16, color: selected ? Colors.black : Colors.white70),
+            const SizedBox(width: 6),
+            Text(label),
+          ],
+        ),
+        selected: selected,
+        selectedColor: const Color(0xFFCCFF00),
+        backgroundColor: const Color(0xFF151821),
+        labelStyle: TextStyle(
+          color: selected ? Colors.black : Colors.white,
+          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+        ),
+        onSelected: (val) {
+          setState(() {
+            _selectedTabIndex = index;
+          });
+        },
       ),
-      icon: Icon(icon, size: 14),
-      label: Text(label,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-      onPressed: () => setState(() => _currentTab = index),
     );
   }
 
-  // --- OPÇÃO 4: ALERTAS PROATIVOS NA TELA INICIAL ---
-  Widget _buildAlertasProativos() {
-    final contasPendentes =
-        _contasVencimento.where((c) => c['paga'] != true).toList();
-    final bool alertaGastosAltos =
-        _saldoEmContas > 0 && _gastosMesFinal > (_saldoEmContas * 0.8);
-
-    if (contasPendentes.isEmpty && !alertaGastosAltos) {
-      return const SizedBox.shrink();
-    }
-
-    return Column(
-      children: [
-        if (contasPendentes.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: _buildPierreCard(
-              borderColor: const Color(0xFFFBBF24).withValues(alpha: 0.4),
-              child: Row(
+  Widget _buildInicioTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          if (saldo <= 0)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A1515),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0x80FF5252)),
+              ),
+              child: const Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0x22FBBF24),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.warning_amber_rounded,
-                        color: Color(0xFFFBBF24), size: 20),
-                  ),
-                  const SizedBox(width: 12),
+                  Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+                  SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '🚨 ${contasPendentes.length} conta(s) pendente(s)',
-                          style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white),
-                        ),
-                        Text(
-                          'Próxima: ${contasPendentes.first['nome']} - ${_formatMoney((contasPendentes.first['valor'] as num).toDouble())}',
-                          style: const TextStyle(
-                              fontSize: 10,
-                              color: GideonAssistenteApp.subtext),
-                        ),
-                      ],
+                    child: Text(
+                      'Saldo Zerado ou Negativo! Registre novas entradas no chat.',
+                      style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                     ),
-                  ),
-                  TextButton(
-                    onPressed: () => setState(() => _currentTab = 3),
-                    child: const Text('Ver contas',
-                        style: TextStyle(
-                            color: GideonAssistenteApp.neonLime,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold)),
-                  ),
+                  )
                 ],
               ),
             ),
-          ),
-        if (alertaGastosAltos)
-          Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: _buildPierreCard(
-              borderColor: const Color(0xFFFB7185).withValues(alpha: 0.4),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0x22FB7185),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.trending_down_rounded,
-                        color: Color(0xFFFB7185), size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
-                          '⚠️ Gastos acima de 80% do saldo',
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white),
-                        ),
-                        Text(
-                          'Recomendamos segurar novos custos supérfluos.',
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: GideonAssistenteApp.subtext),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
 
-  Widget _buildTabDashboard() {
-    final imprevisto = _gastosMesFinal * 0.15;
-
-    return Column(
-      children: [
-        _buildAlertasProativos(),
-        Row(
-          children: [
-            Expanded(
-              child: _buildPierreCard(
-                onTap: _abrirModalEditarSaldo,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            _buildMiniIconBadge('nu', const Color(0xFF9333EA)),
-                            _buildMiniIconBadge('bb', const Color(0xFFFBBF24)),
-                            _buildMiniIconBadge('it', const Color(0xFF2563EB)),
-                          ],
-                        ),
-                        const Icon(Icons.chevron_right,
-                            size: 14, color: GideonAssistenteApp.subtext),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    const Text('Saldo em contas',
-                        style: TextStyle(
-                            fontSize: 11, color: GideonAssistenteApp.subtext)),
-                    Text(
-                      _formatMoney(_saldoEmContas),
-                      style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white),
-                    ),
-                    const Text('3 contas conectadas',
-                        style: TextStyle(
-                            fontSize: 9, color: GideonAssistenteApp.subtext)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildPierreCard(
-                onTap: _abrirModalEditarGastado,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                              width: 8,
-                              height: 16,
-                              color: GideonAssistenteApp.neonLime),
-                          const SizedBox(width: 2),
-                          Container(
-                              width: 8,
-                              height: 24,
-                              color: GideonAssistenteApp.neonLime),
-                          const SizedBox(width: 2),
-                          Container(
-                              width: 8,
-                              height: 12,
-                              color: GideonAssistenteApp.neonLime
-                                  .withValues(alpha: 0.4)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('Gastos do mês',
-                        style: TextStyle(
-                            fontSize: 11, color: GideonAssistenteApp.subtext)),
-                    Text(
-                      _formatMoney(_gastosMesFinal),
-                      style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white),
-                    ),
-                    Text('${_despesas.length} despesas lançadas',
-                        style: const TextStyle(
-                            fontSize: 9, color: GideonAssistenteApp.subtext)),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildPierreCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.credit_card,
-                                size: 14, color: Color(0xFFFBBF24)),
-                            SizedBox(width: 4),
-                            Text('•••• 9694',
-                                style: TextStyle(
-                                    fontSize: 10,
-                                    color: GideonAssistenteApp.subtext)),
-                          ],
-                        ),
-                        Icon(Icons.chevron_right,
-                            size: 14, color: GideonAssistenteApp.subtext),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    const Text('Fatura Atual',
-                        style: TextStyle(
-                            fontSize: 11, color: GideonAssistenteApp.subtext)),
-                    Text(
-                      _formatMoney(_gastosMesFinal * 1.2),
-                      style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white),
-                    ),
-                    const Text('Vence em breve',
-                        style: TextStyle(
-                            fontSize: 9,
-                            color: Color(0xFFFBBF24),
-                            fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildPierreCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Fluxo de caixa',
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: GideonAssistenteApp.subtext)),
-                        Icon(Icons.show_chart,
-                            size: 14, color: GideonAssistenteApp.neonLime),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Text('+${_formatMoney(_saldoEmContas)}',
-                        style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF34D399))),
-                    Text('-${_formatMoney(_gastosMesFinal)}',
-                        style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFFB7185))),
-                    const SizedBox(height: 6),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: const LinearProgressIndicator(
-                        value: 0.0,
-                        backgroundColor: Colors.white10,
-                        color: Color(0xFFFB7185),
-                        minHeight: 4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _buildPierreCard(
-          child: Row(
+          Row(
             children: [
-              Container(
-                width: 40,
-                height: 44,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border:
-                      Border.all(color: GideonAssistenteApp.neonLime, width: 3),
-                ),
-                child: const Center(
-                  child: Text('15%',
-                      style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: GideonAssistenteApp.neonLime)),
+              Expanded(
+                child: _buildClickableCard(
+                  title: 'Saldo em contas',
+                  value: 'R\$ ${saldo.toStringAsFixed(2)}',
+                  subtitle: 'Clique para detalhes',
+                  icon: Icons.account_balance_wallet,
+                  onTap: () => _showCardDetails(
+                    'Saldo em Contas',
+                    'Detalhamento das entradas e saldos consolidados.',
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Saldo Principal Disponível'),
+                      trailing: Text('R\$ ${saldo.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Fundo de Imprevistos Recomendado',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white)),
-                    Text(
-                      'Reserva de ${_formatMoney(imprevisto)} sugerida para custos ocultos.',
-                      style: const TextStyle(
-                          fontSize: 11, color: GideonAssistenteApp.subtext),
+                child: _buildClickableCard(
+                  title: 'Gastos do mês',
+                  value: 'R\$ ${gastos.toStringAsFixed(2)}',
+                  subtitle: '${transacoes.length} despesas lançadas',
+                  icon: Icons.trending_down,
+                  onTap: () => _showCardDetails(
+                    'Gastos do Mês',
+                    'Acompanhamento de todas as despesas acumuladas no mês.',
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFCCFF00), foregroundColor: Colors.black),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          setState(() => _selectedTabIndex = 1);
+                        },
+                        icon: const Icon(Icons.list_alt),
+                        label: const Text('Ver Extrato Completo'),
+                      ),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 12),
-        _buildPierreCard(
-          child: Column(
+          const SizedBox(height: 12),
+          Row(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      const Text('Transações Recentes',
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white)),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                            color: Colors.white10,
-                            borderRadius: BorderRadius.circular(10)),
-                        child: Text('${_despesas.length}',
-                            style: const TextStyle(
-                                fontSize: 10, color: Colors.white)),
-                      ),
-                    ],
+              Expanded(
+                child: _buildClickableCard(
+                  title: 'Fatura Atual',
+                  value: 'R\$ ${fatura.toStringAsFixed(2)}',
+                  subtitle: 'Clique para ver compras',
+                  icon: Icons.credit_card,
+                  onTap: () => _showCardDetails(
+                    'Fatura do Cartão',
+                    'Acompanhamento do cartão de crédito cadastrado.',
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Cartão Principal (•••• 9694)'),
+                      subtitle: const Text('Vence em breve'),
+                      trailing: Text('R\$ ${fatura.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    ),
                   ),
-                  TextButton(
-                    onPressed: () => setState(() => _currentTab = 1),
-                    child: const Text('Ver todas',
-                        style: TextStyle(
-                            color: GideonAssistenteApp.neonLime,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              if (_despesas.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12.0),
-                  child: Text('Nenhuma transação lançada ainda.',
-                      style: TextStyle(
-                          fontSize: 11, color: GideonAssistenteApp.subtext)),
-                )
-              else
-                ..._despesas.take(3).map((d) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              _buildMiniIconBadge('nu', const Color(0xFF9333EA)),
-                              const SizedBox(width: 10),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(d['desc'].toString(),
-                                      style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white)),
-                                  Text('${d['date']} • ${d['category']}',
-                                      style: const TextStyle(
-                                          fontSize: 10,
-                                          color: GideonAssistenteApp.subtext)),
-                                ],
-                              ),
-                            ],
-                          ),
-                          Text(
-                            '-${_formatMoney((d['amount'] as num).toDouble())}',
-                            style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFFFB7185)),
-                          ),
-                        ],
-                      ),
-                    )),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMiniIconBadge(String text, Color color) {
-    return Container(
-      width: 22,
-      height: 22,
-      margin: const EdgeInsets.only(right: 2),
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        border: Border.all(color: GideonAssistenteApp.darkBg, width: 1.5),
-      ),
-      child: Center(
-        child: Text(text,
-            style: const TextStyle(
-                fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white)),
-      ),
-    );
-  }
-
-  Widget _buildTabAtividades() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Atividades',
-            style: TextStyle(
-                fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-        const SizedBox(height: 12),
-        _buildPierreCard(
-          borderColor: const Color(0xFF34D399).withValues(alpha: 0.3),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: const Color(0x2234D399),
-                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.file_present,
-                    color: Color(0xFF34D399), size: 18),
               ),
               const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Importar Extrato Bancário',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white)),
-                    Text('Ficheiros .OFX ou .CSV do seu banco',
-                        style: TextStyle(
-                            fontSize: 10, color: GideonAssistenteApp.subtext)),
-                  ],
+              Expanded(
+                child: _buildClickableCard(
+                  title: 'Fluxo de caixa',
+                  value: '+R\$ ${saldo.toStringAsFixed(2)}\n-R\$ ${gastos.toStringAsFixed(2)}',
+                  subtitle: 'Balanço mensal',
+                  icon: Icons.swap_vert,
+                  onTap: () => _showCardDetails(
+                    'Fluxo de Caixa',
+                    'Balanço comparativo entre entradas acumuladas (+) e saídas (-).',
+                    Column(
+                      children: [
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Total de Entradas'),
+                          trailing: Text('+R\$ ${saldo.toStringAsFixed(2)}', style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                        ),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Total de Saídas'),
+                          trailing: Text('-R\$ ${gastos.toStringAsFixed(2)}', style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0x2234D399),
-                  foregroundColor: const Color(0xFF34D399),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
-                ),
-                onPressed: _abrirModalImportarOFX,
-                child: const Text('Carregar',
-                    style: TextStyle(
-                        fontSize: 11, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 12),
-        if (_despesas.isEmpty)
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24.0),
-              child: Text('Nenhuma atividade registrada.',
-                  style: TextStyle(color: GideonAssistenteApp.subtext)),
+          const SizedBox(height: 16),
+
+          Container(
+            height: 320,
+            decoration: BoxDecoration(
+              color: const Color(0xFF151821),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF232734)),
             ),
-          )
-        else
-          ..._despesas.map((d) => Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: _buildPierreCard(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Color(0xFF232734))),
+                  ),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.shopping_bag_outlined,
-                              size: 18, color: GideonAssistenteApp.subtext),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(d['desc'].toString(),
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white)),
-                              Text('${d['date']} • ${d['category']}',
-                                  style: const TextStyle(
-                                      fontSize: 10,
-                                      color: GideonAssistenteApp.subtext)),
-                            ],
-                          ),
-                        ],
-                      ),
-                      Text(
-                        '-${_formatMoney((d['amount'] as num).toDouble())}',
-                        style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFFB7185)),
-                      ),
-                    ],
-                  ),
-                ),
-              )),
-      ],
-    );
-  }
-
-  Widget _buildTabCompras() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('Compras Supermercado',
-                style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white)),
-            TextButton(
-              onPressed: () {
-                setState(() => _listaCompras.clear());
-                _salvarDadosPersistidos();
-              },
-              child: const Text('Limpar tudo',
-                  style: TextStyle(color: Color(0xFFFB7185), fontSize: 11)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildPierreCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Total Estimado',
-                        style: TextStyle(
-                            fontSize: 11, color: GideonAssistenteApp.subtext)),
-                    const SizedBox(height: 4),
-                    Text(_formatMoney(_totalComprasEstimado),
-                        style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: GideonAssistenteApp.neonLime)),
-                    Text('${_listaCompras.length} itens',
-                        style: const TextStyle(
-                            fontSize: 9, color: GideonAssistenteApp.subtext)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildPierreCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Já No Carrinho',
-                        style: TextStyle(
-                            fontSize: 11, color: GideonAssistenteApp.subtext)),
-                    const SizedBox(height: 4),
-                    Text(_formatMoney(_totalComprasConcluidas),
-                        style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF34D399))),
-                    Text(
-                        '${_listaCompras.where((c) => c['comprado'] == true).length} concluídos',
-                        style: const TextStyle(
-                            fontSize: 9, color: GideonAssistenteApp.subtext)),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _buildPierreCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Novo Item para o Supermercado',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white)),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: _comprarNomeController,
-                      style:
-                          const TextStyle(fontSize: 12, color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Ex: Arroz 5kg, Leite, Café',
-                        hintStyle: const TextStyle(
-                            color: GideonAssistenteApp.subtext),
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.05),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _comprarValorController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      style:
-                          const TextStyle(fontSize: 12, color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Valor (R\$)',
-                        hintStyle: const TextStyle(
-                            color: GideonAssistenteApp.subtext),
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.05),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: GideonAssistenteApp.neonLime,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: () {
-                    final nome = _comprarNomeController.text.trim();
-                    final valor = double.tryParse(_comprarValorController.text
-                            .replaceAll(',', '.')) ??
-                        0.0;
-                    if (nome.isNotEmpty) {
-                      setState(() {
-                        _listaCompras.add(
-                            {'nome': nome, 'valor': valor, 'comprado': false});
-                        _comprarNomeController.clear();
-                        _comprarValorController.clear();
-                      });
-                      _salvarDadosPersistidos();
-                    }
-                  },
-                  child: const Text('Adicionar à Lista de Compras',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w800, fontSize: 12)),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (_listaCompras.isEmpty)
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24.0),
-              child: Text('Sua lista de supermercado está vazia.',
-                  style: TextStyle(color: GideonAssistenteApp.subtext)),
-            ),
-          )
-        else
-          ..._listaCompras.asMap().entries.map((entry) {
-            final idx = entry.key;
-            final item = entry.value;
-            final bool comprado = item['comprado'] == true;
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: _buildPierreCard(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: comprado,
-                          activeColor: GideonAssistenteApp.neonLime,
-                          checkColor: Colors.black,
-                          onChanged: (val) {
-                            setState(() {
-                              item['comprado'] = val == true;
-                            });
-                            _salvarDadosPersistidos();
-                          },
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item['nome'].toString(),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                decoration:
-                                    comprado ? TextDecoration.lineThrough : null,
-                              ),
-                            ),
-                            Text(
-                                'Est: ${_formatMoney((item['valor'] as num).toDouble())}',
-                                style: const TextStyle(
-                                    fontSize: 10,
-                                    color: GideonAssistenteApp.subtext)),
-                          ],
-                        ),
-                      ],
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline,
-                          size: 16, color: GideonAssistenteApp.subtext),
-                      onPressed: () {
-                        setState(() => _listaCompras.removeAt(idx));
-                        _salvarDadosPersistidos();
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-      ],
-    );
-  }
-
-  Widget _buildTabContas() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Contas & Vencimentos',
-            style: TextStyle(
-                fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-        const SizedBox(height: 12),
-        _buildPierreCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Agendar Conta',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white)),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _contaNomeController,
-                style: const TextStyle(fontSize: 12, color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: 'Descrição (ex: Luz, Aluguel)',
-                  hintStyle:
-                      const TextStyle(color: GideonAssistenteApp.subtext),
-                  filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.05),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _contaValorController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      style:
-                          const TextStyle(fontSize: 12, color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Valor (R\$)',
-                        hintStyle: const TextStyle(
-                            color: GideonAssistenteApp.subtext),
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.05),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _contaDataController,
-                      style:
-                          const TextStyle(fontSize: 12, color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Data (10/08)',
-                        hintStyle: const TextStyle(
-                            color: GideonAssistenteApp.subtext),
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.05),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white12,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: () {
-                    final nome = _contaNomeController.text.trim();
-                    final valor = double.tryParse(_contaValorController.text
-                            .replaceAll(',', '.')) ??
-                        0.0;
-                    final data = _contaDataController.text.trim();
-                    if (nome.isNotEmpty) {
-                      setState(() {
-                        _contasVencimento.add({
-                          'nome': nome,
-                          'valor': valor,
-                          'vencimento': data,
-                          'paga': false
-                        });
-                        _contaNomeController.clear();
-                        _contaValorController.clear();
-                        _contaDataController.clear();
-                      });
-                      _salvarDadosPersistidos();
-                    }
-                  },
-                  child: const Text('Salvar Agendamento',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 12)),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (_contasVencimento.isEmpty)
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24.0),
-              child: Text('Nenhuma conta agendada.',
-                  style: TextStyle(color: GideonAssistenteApp.subtext)),
-            ),
-          )
-        else
-          ..._contasVencimento.asMap().entries.map((entry) {
-            final idx = entry.key;
-            final c = entry.value;
-            final bool paga = c['paga'] == true;
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: _buildPierreCard(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: Icon(
-                              paga
-                                  ? Icons.check_circle
-                                  : Icons.radio_button_unchecked,
-                              color: paga
-                                  ? const Color(0xFF34D399)
-                                  : Colors.white54,
-                              size: 20),
-                          onPressed: () {
-                            setState(() {
-                              c['paga'] = !paga;
-                              if (!paga) {
-                                final val = (c['valor'] as num).toDouble();
-                                _saldoEmContas -= val;
-                                _despesas.insert(0, {
-                                  'desc': c['nome'],
-                                  'category': 'Conta',
-                                  'amount': val,
-                                  'date': 'Hoje',
-                                  'banco': 'Nubank',
-                                  'pago': true,
-                                });
-                              }
-                            });
-                            _salvarDadosPersistidos();
-                          },
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              c['nome'].toString(),
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  decoration:
-                                      paga ? TextDecoration.lineThrough : null),
-                            ),
-                            Text('Vence: ${c['vencimento']}',
-                                style: const TextStyle(
-                                    fontSize: 10,
-                                    color: GideonAssistenteApp.subtext)),
-                          ],
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Text(_formatMoney((c['valor'] as num).toDouble()),
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: paga
-                                    ? const Color(0xFF34D399)
-                                    : const Color(0xFFFB7185))),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline,
-                              size: 16, color: GideonAssistenteApp.subtext),
-                          onPressed: () {
-                            setState(() => _contasVencimento.removeAt(idx));
-                            _salvarDadosPersistidos();
-                          },
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-      ],
-    );
-  }
-
-  Widget _buildTabPossuo() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Objetos & Móveis (Já Possuo)',
-            style: TextStyle(
-                fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-        const SizedBox(height: 12),
-        _buildPierreCard(
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _possuoController,
-                      style:
-                          const TextStyle(fontSize: 12, color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Ex: Geladeira, Sofá',
-                        hintStyle: const TextStyle(
-                            color: GideonAssistenteApp.subtext),
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.05),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF10B981),
-                      foregroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () {
-                      if (_possuoController.text.trim().isNotEmpty) {
-                        setState(() {
-                          _jaPossuo.add(_possuoController.text.trim());
-                          _possuoController.clear();
-                        });
-                        _salvarDadosPersistidos();
-                      }
-                    },
-                    child: const Text('Adicionar',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 12)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (_jaPossuo.isEmpty)
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24.0),
-              child: Text('Nenhum item cadastrado no inventário.',
-                  style: TextStyle(color: GideonAssistenteApp.subtext)),
-            ),
-          )
-        else
-          ..._jaPossuo.asMap().entries.map((entry) {
-            final idx = entry.key;
-            final item = entry.value;
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: _buildPierreCard(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('✔️ $item',
-                        style:
-                            const TextStyle(fontSize: 12, color: Colors.white)),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline,
-                          size: 16, color: GideonAssistenteApp.subtext),
-                      onPressed: () {
-                        setState(() => _jaPossuo.removeAt(idx));
-                        _salvarDadosPersistidos();
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-      ],
-    );
-  }
-
-  Widget _buildChatOverlayModal() {
-    return Container(
-      color: GideonAssistenteApp.darkBg,
-      child: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => setState(() => _isChatOverlayOpen = false),
-                  ),
-                  const Column(
-                    children: [
-                      Text('Gideon IA',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: Colors.white)),
-                      Text('Visão Computacional & Finanças',
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: GideonAssistenteApp.subtext)),
-                    ],
-                  ),
-                  TextButton(
-                    onPressed: () => setState(() => _chatMsgs.clear()),
-                    child: const Text('Limpar',
-                        style: TextStyle(
-                            color: GideonAssistenteApp.subtext, fontSize: 12)),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(color: Colors.white10, height: 1),
-            Expanded(
-              child: ListView(
-                controller: _scrollChatController,
-                padding: const EdgeInsets.all(16),
-                children: [
-                  Center(
-                    child: Column(
-                      children: [
-                        Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                                colors: [Color(0xFF1E293B), Color(0xFF0F172A)]),
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(color: Colors.white12),
-                          ),
-                          child: const Center(
-                            child: Icon(Icons.smart_toy,
-                                color: GideonAssistenteApp.neonLime, size: 36),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text('Olá, Taylane',
-                            style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white)),
-                        const Text('Como posso te ajudar hoje?',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: GideonAssistenteApp.subtext)),
-                        const SizedBox(height: 16),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            _buildChatPromptChip('Resumo dos gastos'),
-                            _buildChatPromptChip('Quais contas vencem?'),
-                            _buildChatPromptChip('Tenho R\$ 500 guardados'),
-                            ActionChip(
-                              backgroundColor: GideonAssistenteApp.neonLime
-                                  .withValues(alpha: 0.1),
-                              side: BorderSide(
-                                  color: GideonAssistenteApp.neonLime
-                                      .withValues(alpha: 0.3)),
-                              label: const Text('📷 Ler print de PIX',
-                                  style: TextStyle(
-                                      color: GideonAssistenteApp.neonLime,
-                                      fontSize: 11)),
-                              onPressed: _simularLeituraPrint,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                      ],
-                    ),
-                  ),
-                  ..._chatMsgs.map((msg) {
-                    final isUser = msg['autor'] == 'user';
-                    return Align(
-                      alignment: isUser
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        padding: const EdgeInsets.all(12),
-                        constraints: const BoxConstraints(maxWidth: 320),
+                      Container(
+                        padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: isUser
-                              ? GideonAssistenteApp.neonLime
-                              : GideonAssistenteApp.cardBg,
-                          borderRadius: BorderRadius.circular(16),
-                          border: isUser
-                              ? null
-                              : Border.all(color: Colors.white10),
+                          color: const Color(0xFFCCFF00),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Text(
-                          msg['texto'] ?? '',
-                          style: TextStyle(
-                            color: isUser ? Colors.black : Colors.white,
-                            fontSize: 12,
-                            height: 1.4,
+                        child: const Icon(Icons.bolt, color: Colors.black, size: 14),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text('Chat Gideon (Inteligência Local)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: messages.length,
+                    itemBuilder: (ctx, i) {
+                      bool isUser = messages[i]['sender'] == 'user';
+                      return Align(
+                        alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: isUser ? const Color(0xFFCCFF00) : const Color(0xFF232734),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Text(
+                            messages[i]['text'] ?? '',
+                            style: TextStyle(
+                              color: isUser ? Colors.black : Colors.white,
+                              fontWeight: isUser ? FontWeight.bold : FontWeight.normal,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
+                      );
+                    },
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _chatController,
+                          decoration: const InputDecoration(
+                            hintText: 'Pergunte à Gideon ou lance valores...',
+                          ),
+                          onSubmitted: (_) => _sendMessage(),
+                        ),
                       ),
-                    );
-                  }),
-                ],
-              ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        style: IconButton.styleFrom(
+                          backgroundColor: const Color(0xFFCCFF00),
+                          padding: const EdgeInsets.all(12),
+                        ),
+                        icon: const Icon(Icons.arrow_upward, color: Colors.black),
+                        onPressed: _sendMessage,
+                      )
+                    ],
+                  ),
+                )
+              ],
             ),
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.camera_alt_outlined,
-                        color: Colors.white70),
-                    onPressed: _simularLeituraPrint,
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: _chatController,
-                      style:
-                          const TextStyle(fontSize: 12, color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Envie uma mensagem...',
-                        hintStyle: const TextStyle(
-                            color: GideonAssistenteApp.subtext),
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.05),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            borderSide: BorderSide.none),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
-                      ),
-                      onSubmitted: _processarMensagemUser,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  InkWell(
-                    onTap: () => _processarMensagemUser(_chatController.text),
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: GideonAssistenteApp.neonLime,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Icon(Icons.send,
-                          color: Colors.black, size: 18),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildChatPromptChip(String text) {
-    return ActionChip(
-      backgroundColor: Colors.white.withValues(alpha: 0.05),
-      side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-      label: Text(text,
-          style: const TextStyle(color: Colors.white70, fontSize: 11)),
-      onPressed: () {
-        _chatController.text = text;
-        _processarMensagemUser(text);
-      },
-    );
-  }
-
-  void _abrirModalEditarSaldo() {
-    _editSaldoController.text = _saldoEmContas.toString();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: GideonAssistenteApp.cardBg,
-        title: const Text('Editar Saldo em Contas',
-            style: TextStyle(color: Colors.white, fontSize: 14)),
-        content: TextField(
-          controller: _editSaldoController,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(border: OutlineInputBorder()),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: GideonAssistenteApp.neonLime,
-                foregroundColor: Colors.black),
-            onPressed: () {
-              setState(() {
-                _saldoEmContas =
-                    double.tryParse(_editSaldoController.text) ??
-                        _saldoEmContas;
-              });
-              _salvarDadosPersistidos();
-              Navigator.pop(ctx);
-            },
-            child: const Text('Salvar'),
-          ),
+          )
         ],
       ),
     );
   }
 
-  void _abrirModalEditarGastado() {
-    _editGastadoController.text = _gastosMesFinal.toString();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: GideonAssistenteApp.cardBg,
-        title: const Text('Editar Gastos do Mês',
-            style: TextStyle(color: Colors.white, fontSize: 14)),
-        content: TextField(
-          controller: _editGastadoController,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(border: OutlineInputBorder()),
+  Widget _buildClickableCard({
+    required String title,
+    required String value,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF151821),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF232734)),
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: GideonAssistenteApp.neonLime,
-                foregroundColor: Colors.black),
-            onPressed: () {
-              setState(() {
-                _gastosMesManual =
-                    double.tryParse(_editGastadoController.text);
-              });
-              _salvarDadosPersistidos();
-              Navigator.pop(ctx);
-            },
-            child: const Text('Salvar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _abrirModalChaveApi() {
-    _apiKeyController.text = _geminiApiKey;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: GideonAssistenteApp.cardBg,
-        title: const Text('Configurar Chave Gemini API',
-            style: TextStyle(color: Colors.white, fontSize: 14)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-                'Cole sua chave do Google AI Studio para ativar o atendimento por IA:',
-                style: TextStyle(
-                    color: GideonAssistenteApp.subtext, fontSize: 11)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _apiKeyController,
-              style: const TextStyle(color: Colors.white, fontSize: 12),
-              decoration: const InputDecoration(
-                  border: OutlineInputBorder(), hintText: 'AIzaSy...'),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                Icon(icon, size: 16, color: const Color(0xFFCCFF00)),
+              ],
             ),
+            const SizedBox(height: 8),
+            Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Text(subtitle, style: const TextStyle(fontSize: 10, color: Color(0xFFCCFF00))),
           ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: GideonAssistenteApp.neonLime,
-                foregroundColor: Colors.black),
-            onPressed: () {
-              setState(() {
-                _geminiApiKey = _apiKeyController.text.trim();
-              });
-              _salvarDadosPersistidos();
-              Navigator.pop(ctx);
-            },
-            child: const Text('Ativar e Salvar'),
+      ),
+    );
+  }
+
+  Widget _buildAtividadesTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Histórico de Transações', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              if (transacoes.isNotEmpty)
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      transacoes.clear();
+                      gastos = 0.0;
+                    });
+                    _saveData();
+                  },
+                  icon: const Icon(Icons.delete, color: Colors.redAccent, size: 18),
+                  label: const Text('Limpar Transações', style: TextStyle(color: Colors.redAccent)),
+                )
+            ],
           ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: transacoes.isEmpty
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.receipt_long, size: 48, color: Colors.grey),
+                        SizedBox(height: 12),
+                        Text('Nenhuma transação lançada ainda.', style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: transacoes.length,
+                    itemBuilder: (ctx, i) {
+                      var item = transacoes[i];
+                      return Card(
+                        color: const Color(0xFF151821),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: ListTile(
+                          title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('${item.category} • ${item.date}'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'R\$ ${item.value.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: item.value < 0 ? Colors.redAccent : Colors.greenAccent,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 20),
+                                onPressed: () {
+                                  setState(() {
+                                    transacoes.removeAt(i);
+                                  });
+                                  _saveData();
+                                },
+                              )
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          )
         ],
       ),
     );
   }
 
-  void _abrirModalImportarOFX() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: GideonAssistenteApp.cardBg,
-        title: const Text('Importar Extrato Bancário (.OFX/.CSV)',
-            style: TextStyle(color: Colors.white, fontSize: 14)),
-        content: TextField(
-          controller: _ofxTextController,
-          maxLines: 5,
-          style: const TextStyle(color: Colors.white, fontSize: 11),
-          decoration: const InputDecoration(
-            hintText:
-                'Cole o conteúdo do arquivo .OFX ou .CSV do seu banco...',
-            border: OutlineInputBorder(),
+  Widget _buildComprasTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _groceryNameCtrl,
+                  decoration: const InputDecoration(hintText: 'Item supermercado...'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 90,
+                child: TextField(
+                  controller: _groceryPriceCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(hintText: 'R\$'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFCCFF00),
+                  padding: const EdgeInsets.all(12),
+                ),
+                icon: const Icon(Icons.add, color: Colors.black),
+                onPressed: () {
+                  if (_groceryNameCtrl.text.isNotEmpty) {
+                    double val = double.tryParse(_groceryPriceCtrl.text) ?? 0.0;
+                    setState(() {
+                      compras.add(GroceryItem(
+                        id: DateTime.now().millisecondsSinceEpoch.toString(),
+                        name: _groceryNameCtrl.text,
+                        price: val,
+                      ));
+                    });
+                    _saveData();
+                    _groceryNameCtrl.clear();
+                    _groceryPriceCtrl.clear();
+                  }
+                },
+              )
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF34D399),
-                foregroundColor: Colors.black),
-            onPressed: () {
-              final raw = _ofxTextController.text;
-              if (raw.isNotEmpty) {
-                setState(() {
-                  _despesas.insert(0, {
-                    'desc': 'Lançamento Bancário Importado',
-                    'category': 'Extrato',
-                    'amount': 45.00,
-                    'date': 'Hoje',
-                    'banco': 'Nubank',
-                    'pago': true,
-                  });
-                });
-                _ofxTextController.clear();
-                _salvarDadosPersistidos();
-              }
-              Navigator.pop(ctx);
-            },
-            child: const Text('Importar'),
-          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: compras.isEmpty
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.shopping_cart_outlined, size: 48, color: Colors.grey),
+                        SizedBox(height: 12),
+                        Text('Sua lista de compras está vazia.', style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: compras.length,
+                    itemBuilder: (ctx, i) {
+                      return Card(
+                        color: const Color(0xFF151821),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: ListTile(
+                          title: Text(compras[i].name),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('R\$ ${compras[i].price.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                onPressed: () {
+                                  setState(() {
+                                    compras.removeAt(i);
+                                  });
+                                  _saveData();
+                                },
+                              )
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          )
         ],
       ),
     );
   }
 
-  void _simularLeituraPrint() {
-    setState(() {
-      _isChatOverlayOpen = true;
-      _chatMsgs.add({
-        'autor': 'user',
-        'texto': '📷 [Print do PIX de R\$ 35,00 em Padaria]'
-      });
-      _chatMsgs.add({
-        'autor': 'bot',
-        'texto':
-            '📸 Leitura do print com Gemini: Detectado PIX de R\$ 35,00 em Padaria. Lançado com sucesso!'
-      });
-      _despesas.insert(0, {
-        'desc': 'Padaria (Print PIX)',
-        'category': 'Alimentação',
-        'amount': 35.00,
-        'date': 'Hoje',
-        'banco': 'Nubank',
-        'pago': true,
-      });
-    });
-    _salvarDadosPersistidos();
-    _scrollToBottomChat();
+  Widget _buildContasTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _billTitleCtrl,
+                  decoration: const InputDecoration(hintText: 'Nome da conta (Ex: Luz)...'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 90,
+                child: TextField(
+                  controller: _billAmountCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(hintText: 'R\$'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFCCFF00),
+                  padding: const EdgeInsets.all(12),
+                ),
+                icon: const Icon(Icons.add, color: Colors.black),
+                onPressed: () {
+                  if (_billTitleCtrl.text.isNotEmpty) {
+                    double val = double.tryParse(_billAmountCtrl.text) ?? 0.0;
+                    setState(() {
+                      contas.add(BillItem(
+                        id: DateTime.now().millisecondsSinceEpoch.toString(),
+                        title: _billTitleCtrl.text,
+                        amount: val,
+                        dueDate: 'Em breve',
+                      ));
+                    });
+                    _saveData();
+                    _billTitleCtrl.clear();
+                    _billAmountCtrl.clear();
+                  }
+                },
+              )
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: contas.isEmpty
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.event_busy, size: 48, color: Colors.grey),
+                        SizedBox(height: 12),
+                        Text('Nenhuma conta agendada a vencer.', style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: contas.length,
+                    itemBuilder: (ctx, i) {
+                      return Card(
+                        color: const Color(0xFF151821),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: ListTile(
+                          title: Text(contas[i].title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('Vence em: ${contas[i].dueDate}'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('R\$ ${contas[i].amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                onPressed: () {
+                                  setState(() {
+                                    contas.removeAt(i);
+                                  });
+                                  _saveData();
+                                },
+                              )
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPossuoTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _ownedNameCtrl,
+                  decoration: const InputDecoration(hintText: 'Item ou móvel cadastrado...'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFCCFF00),
+                  padding: const EdgeInsets.all(12),
+                ),
+                icon: const Icon(Icons.add, color: Colors.black),
+                onPressed: () {
+                  if (_ownedNameCtrl.text.isNotEmpty) {
+                    setState(() {
+                      possuo.add(OwnedItem(
+                        id: DateTime.now().millisecondsSinceEpoch.toString(),
+                        name: _ownedNameCtrl.text,
+                        category: 'Geral',
+                      ));
+                    });
+                    _saveData();
+                    _ownedNameCtrl.clear();
+                  }
+                },
+              )
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: possuo.isEmpty
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.inventory, size: 48, color: Colors.grey),
+                        SizedBox(height: 12),
+                        Text('Nenhum item ou imóvel cadastrado no inventário.', style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: possuo.length,
+                    itemBuilder: (ctx, i) {
+                      return Card(
+                        color: const Color(0xFF151821),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: ListTile(
+                          title: Text(possuo[i].name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(possuo[i].category),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                            onPressed: () {
+                              setState(() {
+                                possuo.removeAt(i);
+                              });
+                              _saveData();
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          )
+        ],
+      ),
+    );
   }
 }
