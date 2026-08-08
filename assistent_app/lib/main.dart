@@ -8,9 +8,6 @@ void main() {
   runApp(const GideonApp());
 }
 
-/// ============================================================================
-/// CONFIGURAÇÃO DE TEMA E ESTRUTURA GLOBAL DO APLICATIVO GIDEON
-/// ============================================================================
 class GideonApp extends StatefulWidget {
   const GideonApp({super.key});
 
@@ -149,9 +146,6 @@ class _GideonAppState extends State<GideonApp> {
   }
 }
 
-/// ============================================================================
-/// MODELOS DE DADOS
-/// ============================================================================
 class TransactionItem {
   final String id;
   final String title;
@@ -294,7 +288,7 @@ class MoveTaskItem {
 
 class RepairProItem {
   final String id;
-  final String service; // Ex: Pintor, Chaveiro, Eletricista
+  final String service;
   final String name;
   final double amount;
   final bool isPaid;
@@ -386,9 +380,6 @@ class InstallmentItem {
       );
 }
 
-/// ============================================================================
-/// TELA PRINCIPAL (MAIN HOME SCREEN)
-/// ============================================================================
 class MainHomeScreen extends StatefulWidget {
   final String themeMode;
   final String colorTheme;
@@ -407,6 +398,9 @@ class MainHomeScreen extends StatefulWidget {
 
 class _MainHomeScreenState extends State<MainHomeScreen> {
   int _selectedTabIndex = 0; // 0: Chat, 1: Dashboard, 2: Atividades, 3: Metas, 4: Contas, 5: Cartão, 6: Compras, 7: Mudança, 8: Possuo
+
+  // MODO DE PERSONALIDADE / TOM DA IA
+  String _personalityMode = 'acolhedor'; // 'acolhedor', 'sincero', 'motivador', 'executivo'
 
   // ESTADO FINANCEIRO
   double saldo = 0.0;
@@ -472,7 +466,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   final List<Map<String, String>> messages = [
     {
       'sender': 'bot',
-      'text': 'Perfeitaaa, já estou pronta! 💕 Digite algo como "Gastei 50 no almoço" ou "Recebi 1500" para começarmos.'
+      'text': 'Perfeitaaa, já estou pronta! 💕 Escolha meu tom de conversa acima e digite lançamentos como "Gastei 50 no almoço" ou "Recebi 1500"!'
     }
   ];
 
@@ -533,6 +527,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       final prefs = await SharedPreferences.getInstance();
       if (!mounted) return;
       setState(() {
+        _personalityMode = prefs.getString('personalityMode') ?? 'acolhedor';
         saldo = prefs.getDouble('saldo') ?? 0.0;
         gastos = prefs.getDouble('gastos') ?? 0.0;
         fatura = prefs.getDouble('fatura') ?? 0.0;
@@ -604,6 +599,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   Future<void> _saveData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('personalityMode', _personalityMode);
       await prefs.setDouble('saldo', saldo);
       await prefs.setDouble('gastos', gastos);
       await prefs.setDouble('fatura', fatura);
@@ -744,9 +740,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  /// ============================================================================
-  /// MOTOR LOCAL DE INTELIGÊNCIA FINANCEIRA (NLP)
-  /// ============================================================================
   void _sendMessage() {
     String text = _chatController.text.trim();
     if (text.isEmpty) return;
@@ -812,7 +805,16 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
         );
       });
-      reply = "Perfeitaaa, já registrei! 💖\n\n💵 R\$ ${val.toStringAsFixed(2)}\n📁 $category\n📅 $dateStr\n\nAdoro ver grana entrando! ✨";
+
+      if (_personalityMode == 'sincero') {
+        reply = "Aí sim, grana no bolso! 🤑 R\$ ${val.toStringAsFixed(2)} adicionados. Vê se não gasta tudo de uma vez!";
+      } else if (_personalityMode == 'motivador') {
+        reply = "SENSACIONAL! 🔥 Mais R\$ ${val.toStringAsFixed(2)} no caixa! Você tá num ritmo incrível, continua assim!";
+      } else if (_personalityMode == 'executivo') {
+        reply = "Lançamento confirmado. Crédito: R\$ ${val.toStringAsFixed(2)} ($category). Saldo atualizado: R\$ ${saldo.toStringAsFixed(2)}.";
+      } else {
+        reply = "Perfeitaaa, já registrei! 💖\n\n💵 R\$ ${val.toStringAsFixed(2)}\n📁 $category\n📅 $dateStr\n\nAdoro ver grana entrando! ✨";
+      }
     } else if (isExpense && val > 0) {
       setState(() {
         gastos += val;
@@ -828,7 +830,16 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
         );
       });
-      reply = "Anotado, meu bem! 🛍️\n\n💸 R\$ ${val.toStringAsFixed(2)}\n🏷️ $category ($description)\n📅 $dateStr\n\nSaldo atualizado no seu Dashboard!";
+
+      if (_personalityMode == 'sincero') {
+        reply = "Mais um gasto? 😒 R\$ ${val.toStringAsFixed(2)} em $category ($description). Seu saldo mandou lembranças...";
+      } else if (_personalityMode == 'motivador') {
+        reply = "Anotado! R\$ ${val.toStringAsFixed(2)} registrados! Mantenha o foco no orçamento das suas metas, tamo junto! 💪";
+      } else if (_personalityMode == 'executivo') {
+        reply = "Débito efetuado: R\$ ${val.toStringAsFixed(2)} ($category • $description). Saldo líquido restante: R\$ ${saldo.toStringAsFixed(2)}.";
+      } else {
+        reply = "Anotado, meu bem! 🛍️\n\n💸 R\$ ${val.toStringAsFixed(2)}\n🏷️ $category ($description)\n📅 $dateStr\n\nSaldo atualizado no seu Dashboard!";
+      }
     } else if (lower.contains('saldo')) {
       if (val > 0 && !isExpense && !isGain) {
         setState(() {
@@ -841,7 +852,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     } else if (lower.contains('resumo') || lower.contains('quanto gastei')) {
       reply = "📊 Seu Resumo Rápido ($dateStr):\n• Saldo disponível: R\$ ${saldo.toStringAsFixed(2)}\n• Gastos acumulados: R\$ ${gastos.toStringAsFixed(2)}\n• Fatura do Cartão: R\$ ${fatura.toStringAsFixed(2)}";
     } else {
-      reply = "Entendido! Você pode me mandar frases simples como 'Gastei 50 no Uber' ou 'Recebi 1200' que eu registro tudo pra você! ✨";
+      reply = "Entendido! Mande mensagens como 'Gastei 50 no Uber' ou 'Recebi 1200' que eu gravo tudo no seu extrato!";
     }
 
     _saveData();
@@ -1051,9 +1062,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         ],
       ),
 
-      /// ======================================================================
-      /// BARRA DE NAVEGAÇÃO INFERIOR ESTILO MOCKUP (CLEAN & MODERNA)
-      /// ======================================================================
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
@@ -1112,14 +1120,38 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  // ===========================================================================
-  // ABA 0: CHAT MÓVEL DEDICADO (ESTILO BIA)
-  // ===========================================================================
   Widget _buildChatTab() {
     Color primaryColor = Theme.of(context).primaryColor;
 
     return Column(
       children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            border: const Border(bottom: BorderSide(color: Color(0x1F888888))),
+          ),
+          child: Row(
+            children: [
+              const Text('🎭 Modo:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildPersonalityChip('Acolhedor 💖', 'acolhedor'),
+                      _buildPersonalityChip('Sincero 🎭', 'sincero'),
+                      _buildPersonalityChip('Motivador 🔥', 'motivador'),
+                      _buildPersonalityChip('Executivo 📊', 'executivo'),
+                    ],
+                  ),
+                ),
+              )
+            ],
+          ),
+        ),
+
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.all(16),
@@ -1191,9 +1223,28 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  // ===========================================================================
-  // ABA 1: DASHBOARD (INÍCIO)
-  // ===========================================================================
+  Widget _buildPersonalityChip(String label, String value) {
+    bool selected = _personalityMode == value;
+    Color primaryColor = Theme.of(context).primaryColor;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 6.0),
+      child: ChoiceChip(
+        label: Text(label, style: TextStyle(fontSize: 11, color: selected ? Colors.black : null)),
+        selected: selected,
+        selectedColor: primaryColor,
+        onSelected: (val) {
+          if (val) {
+            setState(() {
+              _personalityMode = value;
+            });
+            _saveData();
+          }
+        },
+      ),
+    );
+  }
+
   Widget _buildInicioTab() {
     Color primaryColor = Theme.of(context).primaryColor;
 
@@ -1257,60 +1308,130 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
           const SizedBox(height: 16),
 
-          // ANÁLISE PERCENTUAL DE GASTOS POR CATEGORIA
-          if (catTotals.isNotEmpty) ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('📊 Distribuição por Categoria', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                      Icon(Icons.pie_chart, color: primaryColor, size: 18),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.bar_chart_rounded, color: primaryColor, size: 22),
+                        const SizedBox(width: 8),
+                        const Text('📈 Gráfico & Análise de Gastos', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    Text(
+                      'Total: R\$ ${totalSaidasExtrato.toStringAsFixed(2)}',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: primaryColor),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                if (catTotals.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20.0),
+                    child: Center(
+                      child: Text('Nenhum gasto registrado para exibir no gráfico.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                    ),
+                  )
+                else
                   Column(
-                    children: catTotals.entries.map((entry) {
-                      double pct = totalSaidasExtrato > 0 ? (entry.value / totalSaidasExtrato) : 0.0;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: SizedBox(
+                          height: 16,
+                          child: Row(
+                            children: catTotals.entries.map((entry) {
+                              double pct = totalSaidasExtrato > 0 ? (entry.value / totalSaidasExtrato) : 0.0;
+                              return Expanded(
+                                flex: (pct * 1000).toInt().clamp(1, 1000),
+                                child: Container(
+                                  color: _getCategoryColor(entry.key, primaryColor),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      Column(
+                        children: catTotals.entries.map((entry) {
+                          double pct = totalSaidasExtrato > 0 ? (entry.value / totalSaidasExtrato) : 0.0;
+                          Color catColor = _getCategoryColor(entry.key, primaryColor);
+
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('${entry.key} (${(pct * 100).toStringAsFixed(1)}%)', style: const TextStyle(fontSize: 12)),
-                                Text('R\$ ${entry.value.toStringAsFixed(2)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: primaryColor)),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          width: 10,
+                                          height: 10,
+                                          decoration: BoxDecoration(color: catColor, shape: BoxShape.circle),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(entry.key, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                                      ],
+                                    ),
+                                    Text(
+                                      'R\$ ${entry.value.toStringAsFixed(2)} (${(pct * 100).toStringAsFixed(1)}%)',
+                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: catColor),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                LinearProgressIndicator(
+                                  value: pct,
+                                  backgroundColor: Colors.grey.withOpacity(0.15),
+                                  color: catColor,
+                                  minHeight: 6,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
                               ],
                             ),
-                            const SizedBox(height: 4),
-                            LinearProgressIndicator(
-                              value: pct,
-                              backgroundColor: Colors.grey.withOpacity(0.2),
-                              color: primaryColor,
-                              minHeight: 6,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
+                          );
+                        }).toList(),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+              ],
             ),
-          ]
+          )
         ],
       ),
     );
+  }
+
+  Color _getCategoryColor(String category, Color primaryColor) {
+    switch (category.toLowerCase()) {
+      case 'alimentação':
+        return const Color(0xFFFF6B6B);
+      case 'moradia':
+        return const Color(0xFF4ECDC4);
+      case 'transporte':
+        return const Color(0xFFFFD166);
+      case 'saúde':
+        return const Color(0xFF06D6A0);
+      case 'lazer':
+        return const Color(0xFF118AB2);
+      default:
+        return primaryColor;
+    }
   }
 
   Widget _buildClickableCard({
@@ -1346,9 +1467,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  // ===========================================================================
-  // ABA 2: EXTRATO (ATIVIDADES)
-  // ===========================================================================
   Widget _buildAtividadesTab() {
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -1429,9 +1547,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  // ===========================================================================
-  // ABA 3: METAS & CAIXINHAS
-  // ===========================================================================
   Widget _buildMetasTab() {
     Color primaryColor = Theme.of(context).primaryColor;
 
@@ -1559,9 +1674,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  // ===========================================================================
-  // ABA 4: CONTAS
-  // ===========================================================================
   Widget _buildContasTab() {
     Color primaryColor = Theme.of(context).primaryColor;
 
@@ -1677,9 +1789,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  // ===========================================================================
-  // ABA 5: PARCELAS
-  // ===========================================================================
   Widget _buildCartaoTab() {
     Color primaryColor = Theme.of(context).primaryColor;
 
@@ -1776,9 +1885,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  // ===========================================================================
-  // ABA 6: COMPRAS
-  // ===========================================================================
   Widget _buildComprasTab() {
     double totalCompras = compras.fold(0.0, (sum, item) => sum + item.price);
     Color primaryColor = Theme.of(context).primaryColor;
@@ -1869,12 +1975,8 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  // ===========================================================================
-  // ABA 7: MUDANÇA (COM PROFISSIONAIS & REPAROS)
-  // ===========================================================================
   Widget _buildMudancaTab() {
     double custoFixoMensalEstimado = simAluguel + simLuzAgua + simInternet + simTransporte + simIptu;
-    double reservaImprevistos = gastosMudanca * 0.15;
     double totalProfissionais = profissionaisMudanca.fold(0.0, (sum, p) => sum + p.amount);
     Color primaryColor = Theme.of(context).primaryColor;
 
@@ -1908,7 +2010,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
           const SizedBox(height: 16),
 
-          // SIMULADOR DE CUSTO DE VIDA MENSAIS
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -1958,7 +2059,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
           const SizedBox(height: 16),
 
-          // GESTOR DE PROFISSIONAIS & REPAROS (PINTOR, CHAVEIRO, LIMPEZA)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -2058,7 +2158,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
           const SizedBox(height: 16),
 
-          // CRONOGRAMA REGRESSIVO DE MUDANÇA
           const Text('⏱️ Cronograma Regressivo', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           _buildTimeframeSection('⏳ Faltam 30 Dias', '30_days'),
@@ -2121,9 +2220,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  // ===========================================================================
-  // ABA 8: JÁ POSSUO
-  // ===========================================================================
   Widget _buildPossuoTab() {
     Color primaryColor = Theme.of(context).primaryColor;
 
