@@ -171,23 +171,27 @@ class OwnedItem {
 class MoveTaskItem {
   final String id;
   final String title;
+  final String timeframe; // '30_days', '15_days', '2_days', 'day_of_move'
   final bool isDone;
 
   MoveTaskItem({
     required this.id,
     required this.title,
+    required this.timeframe,
     this.isDone = false,
   });
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'title': title,
+        'timeframe': timeframe,
         'isDone': isDone,
       };
 
   factory MoveTaskItem.fromJson(Map<String, dynamic> json) => MoveTaskItem(
         id: json['id']?.toString() ?? '',
         title: json['title']?.toString() ?? '',
+        timeframe: json['timeframe']?.toString() ?? '30_days',
         isDone: json['isDone'] == true,
       );
 }
@@ -209,19 +213,20 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   double saldo = 0.0;
   double gastos = 0.0;
   double fatura = 0.0;
-  double saldoMudanca = 0.0;
   double gastosMudanca = 0.0;
+
+  // CUSTOS ESTIMADOS DO SIMULADOR DA CASA NOVA
+  double simAluguel = 0.0;
+  double simLuzAgua = 0.0;
+  double simInternet = 0.0;
+  double simTransporte = 0.0;
+  double simIptu = 0.0;
 
   List<TransactionItem> transacoes = [];
   List<GroceryItem> compras = [];
   List<BillItem> contas = [];
   List<OwnedItem> possuo = [];
-  List<MoveTaskItem> tarefasMudanca = [
-    MoveTaskItem(id: '1', title: 'Orçar serviço de frete/mudança'),
-    MoveTaskItem(id: '2', title: 'Desligar/Transferir titularidade da Luz e Água'),
-    MoveTaskItem(id: '3', title: 'Transferir contrato da Internet/Wi-Fi'),
-    MoveTaskItem(id: '4', title: 'Trocar fechaduras da casa nova'),
-  ];
+  List<MoveTaskItem> tarefasMudanca = [];
 
   // CONTROLLERS
   final TextEditingController _chatController = TextEditingController();
@@ -235,17 +240,47 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   final TextEditingController _moveExpenseTitleCtrl = TextEditingController();
   final TextEditingController _moveExpenseValCtrl = TextEditingController();
 
+  // SIMULADOR CONTROLLERS
+  final TextEditingController _simAluguelCtrl = TextEditingController();
+  final TextEditingController _simLuzAguaCtrl = TextEditingController();
+  final TextEditingController _simInternetCtrl = TextEditingController();
+  final TextEditingController _simTransporteCtrl = TextEditingController();
+  final TextEditingController _simIptuCtrl = TextEditingController();
+
+  // CALCULADORA EMBUTIDA
+  String _calcDisplay = '0';
+  double _calcFirstNum = 0.0;
+  String _calcOperator = '';
+  bool _calcResetNext = false;
+
+  String _selectedTimeframeAdd = '30_days';
+
   final List<Map<String, String>> messages = [
     {
       'sender': 'bot',
-      'text': 'Olá! Sou a Gideon. Todos os valores foram zerados. Digite entradas ou saídas como "Recebi 1200" ou "Comprei pizza por 50".'
+      'text': 'Olá! Sou a Gideon. Digite entradas ou saídas como "Recebi 1200" ou "Comprei pizza por 50".'
     }
   ];
 
   @override
   void initState() {
     super.initState();
+    _loadInitialDefaultTasks();
     _loadData();
+  }
+
+  void _loadInitialDefaultTasks() {
+    tarefasMudanca = [
+      MoveTaskItem(id: '1', title: 'Dar aviso prévio no imóvel atual', timeframe: '30_days'),
+      MoveTaskItem(id: '2', title: 'Pesquisar e orçar transportadoras / carretos', timeframe: '30_days'),
+      MoveTaskItem(id: '3', title: 'Descarte e doação de itens sem uso', timeframe: '30_days'),
+      MoveTaskItem(id: '4', title: 'Agendar transferência de Internet/Luz/Água', timeframe: '15_days'),
+      MoveTaskItem(id: '5', title: 'Comprar fitas adesivas, plásticos bolha e etiquetas', timeframe: '15_days'),
+      MoveTaskItem(id: '6', title: 'Montar Mala/Caixa de Primeira Noite (roupas, toalhas, higiene)', timeframe: '2_days'),
+      MoveTaskItem(id: '7', title: 'Confirmar horário do caminhão e regras do condomínio', timeframe: '2_days'),
+      MoveTaskItem(id: '8', title: 'Tirar foto dos relógios de luz e água (antigo e novo)', timeframe: 'day_of_move'),
+      MoveTaskItem(id: '9', title: 'Fazer vistoria final e entregar chaves', timeframe: 'day_of_move'),
+    ];
   }
 
   @override
@@ -260,6 +295,12 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     _moveTaskCtrl.dispose();
     _moveExpenseTitleCtrl.dispose();
     _moveExpenseValCtrl.dispose();
+
+    _simAluguelCtrl.dispose();
+    _simLuzAguaCtrl.dispose();
+    _simInternetCtrl.dispose();
+    _simTransporteCtrl.dispose();
+    _simIptuCtrl.dispose();
     super.dispose();
   }
 
@@ -271,8 +312,19 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         saldo = prefs.getDouble('saldo') ?? 0.0;
         gastos = prefs.getDouble('gastos') ?? 0.0;
         fatura = prefs.getDouble('fatura') ?? 0.0;
-        saldoMudanca = prefs.getDouble('saldoMudanca') ?? 0.0;
         gastosMudanca = prefs.getDouble('gastosMudanca') ?? 0.0;
+
+        simAluguel = prefs.getDouble('simAluguel') ?? 0.0;
+        simLuzAgua = prefs.getDouble('simLuzAgua') ?? 0.0;
+        simInternet = prefs.getDouble('simInternet') ?? 0.0;
+        simTransporte = prefs.getDouble('simTransporte') ?? 0.0;
+        simIptu = prefs.getDouble('simIptu') ?? 0.0;
+
+        if (simAluguel > 0) _simAluguelCtrl.text = simAluguel.toStringAsFixed(2);
+        if (simLuzAgua > 0) _simLuzAguaCtrl.text = simLuzAgua.toStringAsFixed(2);
+        if (simInternet > 0) _simInternetCtrl.text = simInternet.toStringAsFixed(2);
+        if (simTransporte > 0) _simTransporteCtrl.text = simTransporte.toStringAsFixed(2);
+        if (simIptu > 0) _simIptuCtrl.text = simIptu.toStringAsFixed(2);
 
         String? txStr = prefs.getString('transacoes');
         if (txStr != null) {
@@ -313,8 +365,14 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       await prefs.setDouble('saldo', saldo);
       await prefs.setDouble('gastos', gastos);
       await prefs.setDouble('fatura', fatura);
-      await prefs.setDouble('saldoMudanca', saldoMudanca);
       await prefs.setDouble('gastosMudanca', gastosMudanca);
+
+      await prefs.setDouble('simAluguel', simAluguel);
+      await prefs.setDouble('simLuzAgua', simLuzAgua);
+      await prefs.setDouble('simInternet', simInternet);
+      await prefs.setDouble('simTransporte', simTransporte);
+      await prefs.setDouble('simIptu', simIptu);
+
       await prefs.setString('transacoes', jsonEncode(transacoes.map((e) => e.toJson()).toList()));
       await prefs.setString('compras', jsonEncode(compras.map((e) => e.toJson()).toList()));
       await prefs.setString('contas', jsonEncode(contas.map((e) => e.toJson()).toList()));
@@ -330,7 +388,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         backgroundColor: const Color(0xFF151821),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Zerar Todos os Dados?'),
-        content: const Text('Esta ação apagará todas as transações, compras, contas, plano de mudança e inventário.'),
+        content: const Text('Esta ação apagará todas as transações, compras, contas, simulação de custos e tarefas da mudança.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -346,12 +404,22 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                 saldo = 0.0;
                 gastos = 0.0;
                 fatura = 0.0;
-                saldoMudanca = 0.0;
                 gastosMudanca = 0.0;
+                simAluguel = 0.0;
+                simLuzAgua = 0.0;
+                simInternet = 0.0;
+                simTransporte = 0.0;
+                simIptu = 0.0;
+                _simAluguelCtrl.clear();
+                _simLuzAguaCtrl.clear();
+                _simInternetCtrl.clear();
+                _simTransporteCtrl.clear();
+                _simIptuCtrl.clear();
                 transacoes.clear();
                 compras.clear();
                 contas.clear();
                 possuo.clear();
+                _loadInitialDefaultTasks();
               });
               _saveData();
               Navigator.pop(ctx);
@@ -431,7 +499,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
         );
       });
-      reply = "💰 Ganho de R\$ ${val.toStringAsFixed(2)} ($description) gravado com sucesso para o dia $dateStr! Seu saldo atual é R\$ ${saldo.toStringAsFixed(2)}.";
+      reply = "💰 Ganho de R\$ ${val.toStringAsFixed(2)} ($description) gravado no dia $dateStr! Saldo livre atual: R\$ ${saldo.toStringAsFixed(2)}.";
     } else if (isExpense && val > 0) {
       setState(() {
         gastos += val;
@@ -447,7 +515,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
         );
       });
-      reply = "💸 Gasto de R\$ ${val.toStringAsFixed(2)} ($category • $description) registrado no dia $dateStr! Saldo atualizado para R\$ ${saldo.toStringAsFixed(2)}.";
+      reply = "💸 Gasto de R\$ ${val.toStringAsFixed(2)} ($category • $description) registrado em $dateStr! Saldo atualizado: R\$ ${saldo.toStringAsFixed(2)}.";
     } else if (lower.contains('saldo')) {
       if (val > 0 && !isExpense && !isGain) {
         setState(() {
@@ -492,6 +560,134 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       return clean[0].toUpperCase() + clean.substring(1);
     }
     return fullText;
+  }
+
+  void _showCalculatorModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF151821),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setCalcState) {
+            void onBtnPress(String val) {
+              setCalcState(() {
+                if (val == 'C') {
+                  _calcDisplay = '0';
+                  _calcFirstNum = 0.0;
+                  _calcOperator = '';
+                  _calcResetNext = false;
+                } else if (val == '+' || val == '-' || val == '×' || val == '÷') {
+                  _calcFirstNum = double.tryParse(_calcDisplay) ?? 0.0;
+                  _calcOperator = val;
+                  _calcResetNext = true;
+                } else if (val == '=') {
+                  double secondNum = double.tryParse(_calcDisplay) ?? 0.0;
+                  double res = 0.0;
+                  if (_calcOperator == '+') res = _calcFirstNum + secondNum;
+                  if (_calcOperator == '-') res = _calcFirstNum - secondNum;
+                  if (_calcOperator == '×') res = _calcFirstNum * secondNum;
+                  if (_calcOperator == '÷') res = secondNum != 0 ? _calcFirstNum / secondNum : 0.0;
+
+                  _calcDisplay = res.toStringAsFixed(res.truncateToDouble() == res ? 0 : 2);
+                  _calcOperator = '';
+                  _calcResetNext = true;
+                } else {
+                  if (_calcDisplay == '0' || _calcResetNext) {
+                    _calcDisplay = val;
+                    _calcResetNext = false;
+                  } else {
+                    _calcDisplay += val;
+                  }
+                }
+              });
+            }
+
+            Widget buildBtn(String txt, {Color? color, Color? textColor}) {
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(4.0),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: color ?? const Color(0xFF232734),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () => onBtnPress(txt),
+                    child: Text(txt, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor ?? Colors.white)),
+                  ),
+                ),
+              );
+            }
+
+            return Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('🧮 Calculadora Rápida', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFCCFF00))),
+                      IconButton(icon: const Icon(Icons.close, color: Colors.grey), onPressed: () => Navigator.pop(ctx)),
+                    ],
+                  ),
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0D0F12),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF232734)),
+                    ),
+                    child: Text(
+                      _calcDisplay,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFFCCFF00)),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      buildBtn('C', color: Colors.redAccent.withOpacity(0.3), textColor: Colors.redAccent),
+                      buildBtn('÷', color: const Color(0xFF232734), textColor: const Color(0xFFCCFF00)),
+                      buildBtn('×', color: const Color(0xFF232734), textColor: const Color(0xFFCCFF00)),
+                      buildBtn('-', color: const Color(0xFF232734), textColor: const Color(0xFFCCFF00)),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      buildBtn('7'),
+                      buildBtn('8'),
+                      buildBtn('9'),
+                      buildBtn('+', color: const Color(0xFF232734), textColor: const Color(0xFFCCFF00)),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      buildBtn('4'),
+                      buildBtn('5'),
+                      buildBtn('6'),
+                      buildBtn('=', color: const Color(0xFFCCFF00), textColor: Colors.black),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      buildBtn('1'),
+                      buildBtn('2'),
+                      buildBtn('3'),
+                      buildBtn('0'),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _showCardDetails(String title, String description, Widget? detailWidget) {
@@ -1215,9 +1411,10 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   }
 
   // ===========================================================================
-  // ABA 5: MÓDULO MUDANÇA (ORÇAMENTO, CUSTOS, IMPREVISTOS +15% E CHECKLIST)
+  // ABA 5: MÓDULO MUDANÇA (SIMULADOR, CALCULADORA, CUSTOS E CRONOGRAMA)
   // ===========================================================================
   Widget _buildMudancaTab() {
+    double custoFixoMensalEstimado = simAluguel + simLuzAgua + simInternet + simTransporte + simIptu;
     double reservaImprevistos = gastosMudanca * 0.15;
 
     return SingleChildScrollView(
@@ -1225,11 +1422,132 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('🚚 Planejamento da Mudança', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFCCFF00))),
-          const SizedBox(height: 4),
-          const Text('Controle seus custos com frete, pinturas, taxas e pendências.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text('🚚 Planejamento da Mudança', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFCCFF00))),
+                  SizedBox(height: 4),
+                  Text('Simulação de custos, imprevistos e cronograma.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                ],
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFCCFF00),
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: _showCalculatorModal,
+                icon: const Icon(Icons.calculate, size: 18),
+                label: const Text('Calculadora', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
 
+          // SIMULADOR DE CUSTO DE VIDA MENSAIS (CASA NOVA)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF151821),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFCCFF00)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('🏠 Custo de Vida Mensal (Casa Nova)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
+                    Text('R\$ ${custoFixoMensalEstimado.toStringAsFixed(2)}/mês', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFFCCFF00))),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _simAluguelCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(labelText: 'Aluguel / Condomínio (R\$)'),
+                        onChanged: (val) {
+                          setState(() {
+                            simAluguel = double.tryParse(val.replaceAll(',', '.')) ?? 0.0;
+                          });
+                          _saveData();
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: _simLuzAguaCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(labelText: 'Luz + Água (R\$)'),
+                        onChanged: (val) {
+                          setState(() {
+                            simLuzAgua = double.tryParse(val.replaceAll(',', '.')) ?? 0.0;
+                          });
+                          _saveData();
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _simInternetCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(labelText: 'Internet / TV (R\$)'),
+                        onChanged: (val) {
+                          setState(() {
+                            simInternet = double.tryParse(val.replaceAll(',', '.')) ?? 0.0;
+                          });
+                          _saveData();
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: _simTransporteCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(labelText: 'Transporte (R\$)'),
+                        onChanged: (val) {
+                          setState(() {
+                            simTransporte = double.tryParse(val.replaceAll(',', '.')) ?? 0.0;
+                          });
+                          _saveData();
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _simIptuCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'IPTU e Taxas Recorrentes (R\$)'),
+                  onChanged: (val) {
+                    setState(() {
+                      simIptu = double.tryParse(val.replaceAll(',', '.')) ?? 0.0;
+                    });
+                    _saveData();
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // CARDS DE RESUMO DE INVESTIMENTO NA MUDANÇA E IMPREVISTOS
           Row(
             children: [
               Expanded(
@@ -1243,7 +1561,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Total Investido', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      const Text('Total Investido Mudança', style: TextStyle(fontSize: 11, color: Colors.grey)),
                       const SizedBox(height: 4),
                       Text('R\$ ${gastosMudanca.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.redAccent)),
                     ],
@@ -1273,6 +1591,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
           const SizedBox(height: 16),
 
+          // REGISTRAR CUSTO DIRETO DA MUDANÇA
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -1283,7 +1602,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Adicionar Custo de Mudança (Frete, Reparo, etc.)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                const Text('Adicionar Custo da Mudança (Frete, Reparo, Fita, etc.)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -1338,15 +1657,35 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
           const SizedBox(height: 20),
 
-          const Text('📋 Checklist de Atividades da Mudança', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          // CRONOGRAMA REGRESSIVO DE MUDANÇA (CHECKLIST POR PRAZOS)
+          const Text('⏱️ Cronograma Regressivo de Mudança', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
           const SizedBox(height: 10),
+
+          // ADICIONAR TAREFA
           Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: _moveTaskCtrl,
-                  decoration: const InputDecoration(hintText: 'Nova tarefa da mudança...'),
+                  decoration: const InputDecoration(hintText: 'Nova pendência da mudança...'),
                 ),
+              ),
+              const SizedBox(width: 8),
+              DropdownButton<String>(
+                value: _selectedTimeframeAdd,
+                dropdownColor: const Color(0xFF151821),
+                style: const TextStyle(color: Color(0xFFCCFF00), fontSize: 12, fontWeight: FontWeight.bold),
+                items: const [
+                  DropdownMenuItem(value: '30_days', child: Text('-30 Dias')),
+                  DropdownMenuItem(value: '15_days', child: Text('-15 Dias')),
+                  DropdownMenuItem(value: '2_days', child: Text('-2 Dias')),
+                  DropdownMenuItem(value: 'day_of_move', child: Text('No Dia')),
+                ],
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() => _selectedTimeframeAdd = val);
+                  }
+                },
               ),
               const SizedBox(width: 8),
               IconButton(
@@ -1361,6 +1700,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                       tarefasMudanca.add(MoveTaskItem(
                         id: DateTime.now().millisecondsSinceEpoch.toString(),
                         title: _moveTaskCtrl.text,
+                        timeframe: _selectedTimeframeAdd,
                       ));
                     });
                     _saveData();
@@ -1370,13 +1710,41 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
               )
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+
+          _buildTimeframeSection('⏳ Faltam 30 Dias', '30_days'),
+          _buildTimeframeSection('📦 Faltam 15 Dias', '15_days'),
+          _buildTimeframeSection('🧳 Faltam 2 Dias (Mala da 1ª Noite)', '2_days'),
+          _buildTimeframeSection('🚚 Dia da Mudança (Vistoria e Chaves)', 'day_of_move'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeframeSection(String sectionTitle, String timeframeKey) {
+    var filteredList = tarefasMudanca.where((t) => t.timeframe == timeframeKey).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Text(sectionTitle, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFFCCFF00))),
+        ),
+        if (filteredList.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8.0),
+            child: Text('Nenhuma pendência nesta etapa.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+          )
+        else
           ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: tarefasMudanca.length,
+            itemCount: filteredList.length,
             itemBuilder: (ctx, i) {
-              var item = tarefasMudanca[i];
+              var item = filteredList[i];
+              int realIndex = tarefasMudanca.indexWhere((t) => t.id == item.id);
+
               return Card(
                 color: const Color(0xFF151821),
                 margin: const EdgeInsets.only(bottom: 8),
@@ -1388,11 +1756,14 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                     checkColor: Colors.black,
                     onChanged: (val) {
                       setState(() {
-                        tarefasMudanca[i] = MoveTaskItem(
-                          id: item.id,
-                          title: item.title,
-                          isDone: val == true,
-                        );
+                        if (realIndex != -1) {
+                          tarefasMudanca[realIndex] = MoveTaskItem(
+                            id: item.id,
+                            title: item.title,
+                            timeframe: item.timeframe,
+                            isDone: val == true,
+                          );
+                        }
                       });
                       _saveData();
                     },
@@ -1409,7 +1780,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                     icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
                     onPressed: () {
                       setState(() {
-                        tarefasMudanca.removeAt(i);
+                        if (realIndex != -1) tarefasMudanca.removeAt(realIndex);
                       });
                       _saveData();
                     },
@@ -1418,8 +1789,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
               );
             },
           )
-        ],
-      ),
+      ],
     );
   }
 
