@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -16,9 +17,8 @@ class GideonApp extends StatefulWidget {
 }
 
 class _GideonAppState extends State<GideonApp> {
-  // CONFIGURAÇÕES DE TEMA E CORES
-  String _themeMode = 'dark'; // 'dark', 'light', 'midnight', 'cyberpunk'
-  String _colorTheme = 'pink'; // 'pink', 'neon', 'blue', 'orange'
+  String _themeMode = 'dark';
+  String _colorTheme = 'pink';
 
   @override
   void initState() {
@@ -397,15 +397,18 @@ class MainHomeScreen extends StatefulWidget {
 }
 
 class _MainHomeScreenState extends State<MainHomeScreen> {
-  int _selectedTabIndex = 0; // 0: Chat, 1: Dashboard, 2: Atividades, 3: Metas, 4: Contas, 5: Cartão, 6: Compras, 7: Mudança, 8: Possuo
-
-  String _selectedPersonality = 'acolhedor'; // 'acolhedor', 'sincero', 'motivador', 'executivo'
+  int _selectedTabIndex = 0;
+  String _selectedPersonality = 'acolhedor';
 
   // ESTADO FINANCEIRO
   double saldo = 0.0;
   double gastos = 0.0;
   double fatura = 0.0;
   double gastosMudanca = 0.0;
+
+  // HORAS DE TRABALHO
+  double rendaMensal = 3000.0;
+  double horasMes = 160.0;
 
   // CUSTOS ESTIMADOS DO SIMULADOR DA CASA NOVA
   double simAluguel = 0.0;
@@ -432,9 +435,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   final TextEditingController _billAmountCtrl = TextEditingController();
   final TextEditingController _billDateCtrl = TextEditingController();
   final TextEditingController _ownedNameCtrl = TextEditingController();
-  final TextEditingController _moveTaskCtrl = TextEditingController();
-  final TextEditingController _moveExpenseTitleCtrl = TextEditingController();
-  final TextEditingController _moveExpenseValCtrl = TextEditingController();
 
   final TextEditingController _proServiceCtrl = TextEditingController();
   final TextEditingController _proNameCtrl = TextEditingController();
@@ -452,10 +452,18 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   final TextEditingController _simTransporteCtrl = TextEditingController();
   final TextEditingController _simIptuCtrl = TextEditingController();
 
+  // CONTROLLERS FERRAMENTAS EXTRAS
+  final TextEditingController _splitValCtrl = TextEditingController();
+  final TextEditingController _splitPplCtrl = TextEditingController();
+  final TextEditingController _splitPixCtrl = TextEditingController();
+
+  final TextEditingController _incomeWorkCtrl = TextEditingController();
+  final TextEditingController _hoursWorkCtrl = TextEditingController();
+
   final List<Map<String, String>> messages = [
     {
       'sender': 'bot',
-      'text': 'Olá! Sou a Gideon. Selecione o meu modo de personalidade acima ou use a nova ferramenta no Dashboard para importar extratos do banco em OFX/CSV! 💕'
+      'text': 'Olá! Sou a Gideon. Use o menu abaixo para navegar e aproveite as novas ferramentas de Relatório, Divisor PIX e Detector de Recorrências no Dashboard! 💕'
     }
   ];
 
@@ -490,9 +498,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     _billAmountCtrl.dispose();
     _billDateCtrl.dispose();
     _ownedNameCtrl.dispose();
-    _moveTaskCtrl.dispose();
-    _moveExpenseTitleCtrl.dispose();
-    _moveExpenseValCtrl.dispose();
 
     _proServiceCtrl.dispose();
     _proNameCtrl.dispose();
@@ -509,6 +514,12 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     _simInternetCtrl.dispose();
     _simTransporteCtrl.dispose();
     _simIptuCtrl.dispose();
+
+    _splitValCtrl.dispose();
+    _splitPplCtrl.dispose();
+    _splitPixCtrl.dispose();
+    _incomeWorkCtrl.dispose();
+    _hoursWorkCtrl.dispose();
     super.dispose();
   }
 
@@ -521,6 +532,9 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         gastos = prefs.getDouble('gastos') ?? 0.0;
         fatura = prefs.getDouble('fatura') ?? 0.0;
         gastosMudanca = prefs.getDouble('gastosMudanca') ?? 0.0;
+        rendaMensal = prefs.getDouble('rendaMensal') ?? 3000.0;
+        horasMes = prefs.getDouble('horasMes') ?? 160.0;
+
         _selectedPersonality = prefs.getString('selectedPersonality') ?? 'acolhedor';
 
         simAluguel = prefs.getDouble('simAluguel') ?? 0.0;
@@ -528,6 +542,9 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         simInternet = prefs.getDouble('simInternet') ?? 0.0;
         simTransporte = prefs.getDouble('simTransporte') ?? 0.0;
         simIptu = prefs.getDouble('simIptu') ?? 0.0;
+
+        _incomeWorkCtrl.text = rendaMensal.toStringAsFixed(2);
+        _hoursWorkCtrl.text = horasMes.toStringAsFixed(0);
 
         if (simAluguel > 0) _simAluguelCtrl.text = simAluguel.toStringAsFixed(2);
         if (simLuzAgua > 0) _simLuzAguaCtrl.text = simLuzAgua.toStringAsFixed(2);
@@ -593,6 +610,8 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       await prefs.setDouble('gastos', gastos);
       await prefs.setDouble('fatura', fatura);
       await prefs.setDouble('gastosMudanca', gastosMudanca);
+      await prefs.setDouble('rendaMensal', rendaMensal);
+      await prefs.setDouble('horasMes', horasMes);
       await prefs.setString('selectedPersonality', _selectedPersonality);
 
       await prefs.setDouble('simAluguel', simAluguel);
@@ -666,8 +685,316 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   }
 
   /// ============================================================================
-  /// IMPORTADOR E PARSER INTELIGENTE DE EXTRATO BANCÁRIO (OFX / CSV)
+  /// 📄 RECURSO 1: GERADOR DE RELATÓRIO WHATSAPP (1 CLIQUE)
   /// ============================================================================
+  void _generateAndShareReport() {
+    DateTime now = DateTime.now();
+    String monthStr = "${now.month.toString().padLeft(2, '0')}/${now.year}";
+
+    Map<String, double> catTotals = {};
+    double totalSaidasExtrato = 0.0;
+    for (var tx in transacoes) {
+      if (tx.value < 0) {
+        double posVal = tx.value.abs();
+        catTotals[tx.category] = (catTotals[tx.category] ?? 0.0) + posVal;
+        totalSaidasExtrato += posVal;
+      }
+    }
+
+    String reportText = "📊 *RELATÓRIO FINANCEIRO GIDEON APP* ($monthStr)\n\n"
+        "💵 *Saldo Atual:* R\$ ${saldo.toStringAsFixed(2)}\n"
+        "💸 *Gastos no Mês:* R\$ ${gastos.toStringAsFixed(2)}\n"
+        "💳 *Fatura Atual:* R\$ ${fatura.toStringAsFixed(2)}\n\n"
+        "🏷️ *ONDE VOCÊ MAIS GASTOU:*\n";
+
+    if (catTotals.isEmpty) {
+      reportText += "• Nenhum gasto registrado ainda.\n";
+    } else {
+      catTotals.forEach((cat, val) {
+        double pct = totalSaidasExtrato > 0 ? (val / totalSaidasExtrato) * 100 : 0;
+        reportText += "• $cat: R\$ ${val.toStringAsFixed(2)} (${pct.toStringAsFixed(1)}%)\n";
+      });
+    }
+
+    reportText += "\n📅 *CONTAS DO MÊS:*\n";
+    int pagas = contas.where((b) => b.isPaid).length;
+    int pendentes = contas.where((b) => !b.isPaid).length;
+    reportText += "• Pagas: $pagas | Pendentes: $pendentes\n\n"
+        "✨ *Gerado automaticamente via Gideon App*";
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('📄 Relatório Formatado (WhatsApp)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).inputDecorationTheme.fillColor,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: SelectableText(reportText, style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).primaryColor,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.copy, size: 18),
+                label: const Text('Copiar Relatório Formatado', style: TextStyle(fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: reportText));
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: const Text('📋 Relatório copiado para a área de transferência!'), backgroundColor: Theme.of(context).primaryColor),
+                  );
+                },
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// ============================================================================
+  /// ⚡ RECURSO 2: DETECTOR DE ASSINATURAS E RECORRÊNCIAS
+  /// ============================================================================
+  void _showSubscriptionsModal() {
+    Color primaryColor = Theme.of(context).primaryColor;
+    List<String> keywords = ['netflix', 'spotify', 'amazon', 'prime', 'ifood', 'gym', 'academia', 'hbo', 'disney', 'uber', 'globo', 'youtube', 'apple'];
+
+    List<TransactionItem> recurring = transacoes.where((tx) {
+      String titleLower = tx.title.toLowerCase();
+      return keywords.any((kw) => titleLower.contains(kw));
+    }).toList();
+
+    double totalSubscriptions = recurring.fold(0.0, (sum, tx) => sum + tx.value.abs());
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('⚡ Assinaturas & Gastos Recorrentes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryColor)),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text('A IA identificou R\$ ${totalSubscriptions.toStringAsFixed(2)}/mês em serviços recorrentes:', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 12),
+            if (recurring.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Center(child: Text('Nenhuma assinatura recorrente detectada ainda.', style: TextStyle(color: Colors.grey))),
+              )
+            else
+              Expanded(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: recurring.length,
+                  itemBuilder: (context, i) {
+                    var tx = recurring[i];
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(backgroundColor: primaryColor.withOpacity(0.2), child: Icon(Icons.autorenew, color: primaryColor, size: 18)),
+                      title: Text(tx.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('Gasto fixo recorrente • ${tx.date}'),
+                      trailing: Text('R\$ ${tx.value.abs().toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: primaryColor)),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// ============================================================================
+  /// 🤝 RECURSO 3: DIVISOR DE DESPESAS RÁPIDAS & COPIA PIX
+  /// ============================================================================
+  void _showSplitBillModal() {
+    Color primaryColor = Theme.of(context).primaryColor;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          top: 20,
+          left: 20,
+          right: 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('🤝 Divisor de Despesas & PIX Copia e Cola', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryColor)),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _splitValCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Valor Total da Conta (R\$)'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _splitPplCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Quantidade de Pessoas'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _splitPixCtrl,
+              decoration: const InputDecoration(labelText: 'Sua Chave PIX (CPF, Celular, Email ou Aleatória)'),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.send, size: 18),
+                label: const Text('Gerar Mensagem para WhatsApp', style: TextStyle(fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  double tot = double.tryParse(_splitValCtrl.text.replaceAll(',', '.')) ?? 0.0;
+                  int ppl = int.tryParse(_splitPplCtrl.text) ?? 1;
+                  if (ppl < 1) ppl = 1;
+                  double each = tot / ppl;
+                  String pixKey = _splitPixCtrl.text.trim();
+
+                  String msg = "💸 *DIVISÃO DE CONTA GIDEON*\n\n"
+                      "• Valor Total: R\$ ${tot.toStringAsFixed(2)}\n"
+                      "• Dividido entre: $ppl pessoas\n"
+                      "👉 *Valor por pessoa:* R\$ ${each.toStringAsFixed(2)}\n\n"
+                      "🔑 *Chave PIX:* $pixKey";
+
+                  Clipboard.setData(ClipboardData(text: msg));
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: const Text('📲 Mensagem PIX copiada! Cole no grupo do WhatsApp.'), backgroundColor: primaryColor),
+                  );
+                },
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// ============================================================================
+  /// ⌛ RECURSO 5: CALCULADORA "CUSTOU QUANTAS HORAS DE TRABALHO?"
+  /// ============================================================================
+  void _showHoursWorkSettings() {
+    Color primaryColor = Theme.of(context).primaryColor;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          top: 20,
+          left: 20,
+          right: 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('⌛ Calculadora de Horas Trabalhadas', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: primaryColor)),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text('O Gideon traduz seus gastos em quantas horas da sua jornada de trabalho aquela compra custou:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _incomeWorkCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Sua Renda Mensal Líquida (R\$)'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _hoursWorkCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Horas Trabalhadas no Mês (Padrão: 160h)'),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () {
+                  setState(() {
+                    rendaMensal = double.tryParse(_incomeWorkCtrl.text.replaceAll(',', '.')) ?? 3000.0;
+                    horasMes = double.tryParse(_hoursWorkCtrl.text.replaceAll(',', '.')) ?? 160.0;
+                  });
+                  _saveData();
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: const Text('✅ Configurações de horas de trabalho salvas!'), backgroundColor: primaryColor),
+                  );
+                },
+                child: const Text('Salvar Parâmetros', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// IMPORTADOR E PARSER OFX / CSV
   void _showOfxImportModal() {
     Color primaryColor = Theme.of(context).primaryColor;
     showModalBottomSheet(
@@ -743,7 +1070,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     DateTime now = DateTime.now();
     String todayStr = "${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}";
 
-    // PARSER OFX
     if (rawText.contains('<STMTTRN>') || rawText.contains('<TRNAMT>')) {
       List<String> trnBlocks = rawText.split('<STMTTRN>');
       for (var block in trnBlocks) {
@@ -790,7 +1116,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         }
       }
     } else {
-      // PARSER CSV
       List<String> lines = rawText.split('\n');
       for (var line in lines) {
         if (line.trim().isEmpty) continue;
@@ -883,6 +1208,10 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     String category = _detectCategory(lower);
     String description = _extractDescription(input, val);
 
+    double valorHora = (horasMes > 0) ? (rendaMensal / horasMes) : 18.75;
+    double horasEquivalentes = (valorHora > 0) ? (val / valorHora) : 0;
+    String horaExtraMsg = (val > 0) ? " ⌛ *(Equivale a ${horasEquivalentes.toStringAsFixed(1)} horas de trabalho)*" : "";
+
     String reply = "";
 
     bool isGain = lower.contains('recebi') ||
@@ -941,13 +1270,13 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       });
 
       if (_selectedPersonality == 'sincero') {
-        reply = "Lançado! R\$ ${val.toStringAsFixed(2)} no saco ($category). Seu saldo livre agora é R\$ ${saldo.toStringAsFixed(2)}. Tem certeza que essa compra era necessária? 🎭";
+        reply = "Lançado! R\$ ${val.toStringAsFixed(2)} no saco ($category).$horaExtraMsg. Seu saldo livre agora é R\$ ${saldo.toStringAsFixed(2)}. Tem certeza que essa compra era necessária? 🎭";
       } else if (_selectedPersonality == 'motivador') {
-        reply = "Registrado! R\$ ${val.toStringAsFixed(2)} ($category). Sem culpa, só foco na meta! Vamos manter o controle das próximas escolhas! 🔥";
+        reply = "Registrado! R\$ ${val.toStringAsFixed(2)} ($category).$horaExtraMsg. Sem culpa, só foco na meta! Vamos manter o controle das próximas escolhas! 🔥";
       } else if (_selectedPersonality == 'executivo') {
-        reply = "Lançamento de despesa processado: R\$ ${val.toStringAsFixed(2)} ($category). Saldo remanescente: R\$ ${saldo.toStringAsFixed(2)}. 📊";
+        reply = "Lançamento de despesa processado: R\$ ${val.toStringAsFixed(2)} ($category).$horaExtraMsg. Saldo remanescente: R\$ ${saldo.toStringAsFixed(2)}. 📊";
       } else {
-        reply = "Anotado, meu bem! 🛍️\n\n💸 R\$ ${val.toStringAsFixed(2)}\n🏷️ $category ($description)\n📅 $dateStr\n\nSaldo atualizado no seu Dashboard!";
+        reply = "Anotado, meu bem! 🛍️\n\n💸 R\$ ${val.toStringAsFixed(2)}\n🏷️ $category ($description)$horaExtraMsg\n📅 $dateStr\n\nSaldo atualizado no seu Dashboard!";
       }
     } else if (lower.contains('saldo')) {
       if (val > 0 && !isExpense && !isGain) {
@@ -1307,44 +1636,69 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       }
     }
 
+    // PREVISÃO INTELIGENTE DE SALDO NO FIM DO MÊS
+    DateTime now = DateTime.now();
+    int totalDaysInMonth = DateTime(now.year, now.month + 1, 0).day;
+    int remainingDays = totalDaysInMonth - now.day;
+    double dailyAverageExpense = (now.day > 0) ? (gastos / now.day) : 0.0;
+    double upcomingBillsSum = contas.where((b) => !b.isPaid).fold(0.0, (s, b) => s + b.amount);
+    double projectedEndBalance = saldo - (dailyAverageExpense * remainingDays) - upcomingBillsSum;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // BOTÃO DE IMPORTAÇÃO DE EXTRATO BANCÁRIO (OFX/CSV)
-          InkWell(
-            onTap: _showOfxImportModal,
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: primaryColor, width: 1.5),
-              ),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: primaryColor,
-                    radius: 18,
-                    child: const Icon(Icons.account_balance, color: Colors.black, size: 20),
+          // BARRA DE FERRAMENTAS RÁPIDAS
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildActionButton('🏦 Extrato Bancário', Icons.account_balance, _showOfxImportModal),
+                const SizedBox(width: 8),
+                _buildActionButton('📄 WhatsApp Report', Icons.share, _generateAndShareReport),
+                const SizedBox(width: 8),
+                _buildActionButton('⚡ Assinaturas', Icons.autorenew, _showSubscriptionsModal),
+                const SizedBox(width: 8),
+                _buildActionButton('🤝 Dividir PIX', Icons.call_split, _showSplitBillModal),
+                const SizedBox(width: 8),
+                _buildActionButton('⌛ Horas/Trabalho', Icons.timer, _showHoursWorkSettings),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // PREVISÃO INTELIGENTE DE SALDO
+          Container(
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: projectedEndBalance >= 0 ? primaryColor.withOpacity(0.12) : Colors.redAccent.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: projectedEndBalance >= 0 ? primaryColor : Colors.redAccent, width: 1.2),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  projectedEndBalance >= 0 ? Icons.psychology : Icons.warning_amber_rounded,
+                  color: projectedEndBalance >= 0 ? primaryColor : Colors.redAccent,
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('🔮 Previsão Inteligente até o Fim do Mês', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: projectedEndBalance >= 0 ? primaryColor : Colors.redAccent)),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Com a média diária de R\$ ${dailyAverageExpense.toStringAsFixed(2)} e R\$ ${upcomingBillsSum.toStringAsFixed(2)} em contas, seu saldo projetado para o dia $totalDaysInMonth é R\$ ${projectedEndBalance.toStringAsFixed(2)}.',
+                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text('Importar Extrato Bancário (OFX / CSV)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        SizedBox(height: 2),
-                        Text('Conecte os lançamentos do seu banco em 1 clique', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                      ],
-                    ),
-                  ),
-                  Icon(Icons.arrow_forward_ios, size: 14, color: primaryColor),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
 
@@ -1393,7 +1747,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
           const SizedBox(height: 16),
 
-          // ANÁLISE PERCENTUAL DE GASTOS POR CATEGORIA
           if (catTotals.isNotEmpty) ...[
             Container(
               padding: const EdgeInsets.all(16),
@@ -1446,6 +1799,22 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ]
         ],
       ),
+    );
+  }
+
+  Widget _buildActionButton(String label, IconData icon, VoidCallback onTap) {
+    Color primaryColor = Theme.of(context).primaryColor;
+    return ElevatedButton.icon(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Theme.of(context).cardColor,
+        foregroundColor: primaryColor,
+        side: BorderSide(color: primaryColor.withOpacity(0.5)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+      icon: Icon(icon, size: 16),
+      label: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+      onPressed: onTap,
     );
   }
 
@@ -2015,7 +2384,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
           const SizedBox(height: 16),
 
-          // SIMULADOR DE CUSTO DE VIDA MENSAIS
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -2065,7 +2433,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
           const SizedBox(height: 16),
 
-          // GESTOR DE PROFISSIONAIS & REPAROS (PINTOR, CHAVEIRO, LIMPEZA)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -2165,7 +2532,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
           const SizedBox(height: 16),
 
-          // CRONOGRAMA REGRESSIVO DE MUDANÇA
           const Text('⏱️ Cronograma Regressivo', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           _buildTimeframeSection('⏳ Faltam 30 Dias', '30_days'),
