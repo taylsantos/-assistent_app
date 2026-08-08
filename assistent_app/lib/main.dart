@@ -92,23 +92,27 @@ class GroceryItem {
   final String id;
   final String name;
   final double price;
+  final bool isBought;
 
   GroceryItem({
     required this.id,
     required this.name,
     required this.price,
+    this.isBought = false,
   });
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
         'price': price,
+        'isBought': isBought,
       };
 
   factory GroceryItem.fromJson(Map<String, dynamic> json) => GroceryItem(
         id: json['id']?.toString() ?? '',
         name: json['name']?.toString() ?? '',
         price: (json['price'] is num) ? (json['price'] as num).toDouble() : 0.0,
+        isBought: json['isBought'] == true,
       );
 }
 
@@ -196,6 +200,68 @@ class MoveTaskItem {
       );
 }
 
+class GoalItem {
+  final String id;
+  final String title;
+  final double targetAmount;
+  double currentAmount;
+
+  GoalItem({
+    required this.id,
+    required this.title,
+    required this.targetAmount,
+    this.currentAmount = 0.0,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'targetAmount': targetAmount,
+        'currentAmount': currentAmount,
+      };
+
+  factory GoalItem.fromJson(Map<String, dynamic> json) => GoalItem(
+        id: json['id']?.toString() ?? '',
+        title: json['title']?.toString() ?? '',
+        targetAmount: (json['targetAmount'] is num) ? (json['targetAmount'] as num).toDouble() : 0.0,
+        currentAmount: (json['currentAmount'] is num) ? (json['currentAmount'] as num).toDouble() : 0.0,
+      );
+}
+
+class InstallmentItem {
+  final String id;
+  final String title;
+  final double totalAmount;
+  final int totalInstallments;
+  int paidInstallments;
+
+  InstallmentItem({
+    required this.id,
+    required this.title,
+    required this.totalAmount,
+    required this.totalInstallments,
+    this.paidInstallments = 0,
+  });
+
+  double get monthlyValue => totalInstallments > 0 ? totalAmount / totalInstallments : 0.0;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'totalAmount': totalAmount,
+        'totalInstallments': totalInstallments,
+        'paidInstallments': paidInstallments,
+      };
+
+  factory InstallmentItem.fromJson(Map<String, dynamic> json) => InstallmentItem(
+        id: json['id']?.toString() ?? '',
+        title: json['title']?.toString() ?? '',
+        totalAmount: (json['totalAmount'] is num) ? (json['totalAmount'] as num).toDouble() : 0.0,
+        totalInstallments: (json['totalInstallments'] is num) ? (json['totalInstallments'] as num).toInt() : 1,
+        paidInstallments: (json['paidInstallments'] is num) ? (json['paidInstallments'] as num).toInt() : 0,
+      );
+}
+
 /// ============================================================================
 /// TELA PRINCIPAL (MAIN HOME SCREEN)
 /// ============================================================================
@@ -209,7 +275,7 @@ class MainHomeScreen extends StatefulWidget {
 class _MainHomeScreenState extends State<MainHomeScreen> {
   int _selectedTabIndex = 0;
 
-  // ESTADO FINANCEIRO ZERADO POR PADRÃO
+  // ESTADO FINANCEIRO
   double saldo = 0.0;
   double gastos = 0.0;
   double fatura = 0.0;
@@ -227,6 +293,8 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   List<BillItem> contas = [];
   List<OwnedItem> possuo = [];
   List<MoveTaskItem> tarefasMudanca = [];
+  List<GoalItem> metas = [];
+  List<InstallmentItem> parcelamentos = [];
 
   // CONTROLLERS
   final TextEditingController _chatController = TextEditingController();
@@ -239,6 +307,13 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   final TextEditingController _moveTaskCtrl = TextEditingController();
   final TextEditingController _moveExpenseTitleCtrl = TextEditingController();
   final TextEditingController _moveExpenseValCtrl = TextEditingController();
+
+  // CONTROLLERS METAS E PARCELAS
+  final TextEditingController _goalTitleCtrl = TextEditingController();
+  final TextEditingController _goalTargetCtrl = TextEditingController();
+  final TextEditingController _instTitleCtrl = TextEditingController();
+  final TextEditingController _instTotalValCtrl = TextEditingController();
+  final TextEditingController _instCountCtrl = TextEditingController();
 
   // SIMULADOR CONTROLLERS
   final TextEditingController _simAluguelCtrl = TextEditingController();
@@ -258,7 +333,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   final List<Map<String, String>> messages = [
     {
       'sender': 'bot',
-      'text': 'Olá! Sou a Gideon. Digite entradas ou saídas como "Recebi 1200" ou "Comprei pizza por 50".'
+      'text': 'Olá! Sou a Gideon. Converse comigo para registrar gastos, ganhos, contas, metas ou parcelamentos!'
     }
   ];
 
@@ -295,6 +370,12 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     _moveTaskCtrl.dispose();
     _moveExpenseTitleCtrl.dispose();
     _moveExpenseValCtrl.dispose();
+
+    _goalTitleCtrl.dispose();
+    _goalTargetCtrl.dispose();
+    _instTitleCtrl.dispose();
+    _instTotalValCtrl.dispose();
+    _instCountCtrl.dispose();
 
     _simAluguelCtrl.dispose();
     _simLuzAguaCtrl.dispose();
@@ -355,6 +436,18 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           List<dynamic> l = jsonDecode(mvdStr);
           tarefasMudanca = l.map((e) => MoveTaskItem.fromJson(Map<String, dynamic>.from(e as Map))).toList();
         }
+
+        String? metaStr = prefs.getString('metas');
+        if (metaStr != null) {
+          List<dynamic> l = jsonDecode(metaStr);
+          metas = l.map((e) => GoalItem.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+        }
+
+        String? parStr = prefs.getString('parcelamentos');
+        if (parStr != null) {
+          List<dynamic> l = jsonDecode(parStr);
+          parcelamentos = l.map((e) => InstallmentItem.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+        }
       });
     } catch (_) {}
   }
@@ -378,6 +471,8 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       await prefs.setString('contas', jsonEncode(contas.map((e) => e.toJson()).toList()));
       await prefs.setString('possuo', jsonEncode(possuo.map((e) => e.toJson()).toList()));
       await prefs.setString('tarefasMudanca', jsonEncode(tarefasMudanca.map((e) => e.toJson()).toList()));
+      await prefs.setString('metas', jsonEncode(metas.map((e) => e.toJson()).toList()));
+      await prefs.setString('parcelamentos', jsonEncode(parcelamentos.map((e) => e.toJson()).toList()));
     } catch (_) {}
   }
 
@@ -388,7 +483,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         backgroundColor: const Color(0xFF151821),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Zerar Todos os Dados?'),
-        content: const Text('Esta ação apagará todas as transações, compras, contas, simulação de custos e tarefas da mudança.'),
+        content: const Text('Esta ação apagará transações, metas, parcelas, contas, compras e tarefas.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -419,6 +514,8 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                 compras.clear();
                 contas.clear();
                 possuo.clear();
+                metas.clear();
+                parcelamentos.clear();
                 _loadInitialDefaultTasks();
               });
               _saveData();
@@ -526,7 +623,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         reply = "📊 Seu saldo livre em conta é de R\$ ${saldo.toStringAsFixed(2)}.";
       }
     } else if (lower.contains('resumo') || lower.contains('quanto gastei')) {
-      reply = "📊 Resumo Geral ($dateStr):\n• Saldo disponível: R\$ ${saldo.toStringAsFixed(2)}\n• Gastos do Mês: R\$ ${gastos.toStringAsFixed(2)}\n• Fatura Atual: R\$ ${fatura.toStringAsFixed(2)}";
+      reply = "📊 Resumo Geral ($dateStr):\n• Saldo livre: R\$ ${saldo.toStringAsFixed(2)}\n• Gastos do Mês: R\$ ${gastos.toStringAsFixed(2)}\n• Fatura Atual: R\$ ${fatura.toStringAsFixed(2)}";
     } else {
       reply = "Entendido! Você pode me dizer 'Comprei pizza por 50' para saídas ou 'Recebi 1200 de salário' para entradas.";
     }
@@ -763,10 +860,12 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
               children: [
                 _buildTabChip(0, 'Início', Icons.home),
                 _buildTabChip(1, 'Atividades', Icons.list_alt),
-                _buildTabChip(2, 'Compras Supermercado', Icons.shopping_cart),
-                _buildTabChip(3, 'Contas', Icons.calendar_today),
-                _buildTabChip(4, 'Mudança', Icons.local_shipping),
-                _buildTabChip(5, 'Já Possuo', Icons.inventory_2),
+                _buildTabChip(2, 'Metas & Caixinhas', Icons.savings),
+                _buildTabChip(3, 'Contas & Dívidas', Icons.calendar_month),
+                _buildTabChip(4, 'Cartão & Parcelas', Icons.credit_card),
+                _buildTabChip(5, 'Compras', Icons.shopping_cart),
+                _buildTabChip(6, 'Mudança', Icons.local_shipping),
+                _buildTabChip(7, 'Já Possuo', Icons.inventory_2),
               ],
             ),
           ),
@@ -776,8 +875,10 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
               children: [
                 _buildInicioTab(),
                 _buildAtividadesTab(),
-                _buildComprasTab(),
+                _buildMetasTab(),
                 _buildContasTab(),
+                _buildCartaoTab(),
+                _buildComprasTab(),
                 _buildMudancaTab(),
                 _buildPossuoTab(),
               ],
@@ -817,12 +918,23 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   }
 
   // ===========================================================================
-  // ABA 1: INÍCIO
+  // ABA 1: INÍCIO (DASHBOARD EXECUTIVO)
   // ===========================================================================
   Widget _buildInicioTab() {
+    Map<String, double> catTotals = {};
+    double totalSaidasExtrato = 0.0;
+    for (var tx in transacoes) {
+      if (tx.value < 0) {
+        double posVal = tx.value.abs();
+        catTotals[tx.category] = (catTotals[tx.category] ?? 0.0) + posVal;
+        totalSaidasExtrato += posVal;
+      }
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (saldo <= 0)
             Container(
@@ -940,6 +1052,60 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             ],
           ),
           const SizedBox(height: 16),
+
+          // ANÁLISE PERCENTUAL DE GASTOS POR CATEGORIA (GRÁFICO VISUAL)
+          if (catTotals.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF151821),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFF232734)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: const [
+                      Text('📊 Distribuição de Gastos por Categoria', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
+                      Icon(Icons.pie_chart, color: Color(0xFFCCFF00), size: 18),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Column(
+                    children: catTotals.entries.map((entry) {
+                      double pct = totalSaidasExtrato > 0 ? (entry.value / totalSaidasExtrato) : 0.0;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('${entry.key} (${(pct * 100).toStringAsFixed(1)}%)', style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                                Text('R\$ ${entry.value.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFCCFF00))),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            LinearProgressIndicator(
+                              value: pct,
+                              backgroundColor: const Color(0xFF232734),
+                              color: const Color(0xFFCCFF00),
+                              minHeight: 6,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
 
           // CHAT COM GIDEON
           Container(
@@ -1150,7 +1316,488 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   }
 
   // ===========================================================================
-  // ABA 3: COMPRAS COM SOMA AUTOMÁTICA & CARD NO TOPO
+  // ABA 3: METAS & CAIXINHAS FINANCEIRAS
+  // ===========================================================================
+  Widget _buildMetasTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('🎯 Caixinhas & Metas Financeiras', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFCCFF00))),
+          const SizedBox(height: 4),
+          const Text('Guarde dinheiro para objetivos específicos e acompanhe o progresso.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+          const SizedBox(height: 16),
+
+          // ADICIONAR NOVA META
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _goalTitleCtrl,
+                  decoration: const InputDecoration(hintText: 'Nome da Meta (ex: Reserva, Geladeira)...'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 100,
+                child: TextField(
+                  controller: _goalTargetCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(hintText: 'Meta R\$'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFCCFF00),
+                  padding: const EdgeInsets.all(12),
+                ),
+                icon: const Icon(Icons.add, color: Colors.black),
+                onPressed: () {
+                  if (_goalTitleCtrl.text.isNotEmpty) {
+                    double target = double.tryParse(_goalTargetCtrl.text.replaceAll(',', '.')) ?? 0.0;
+                    setState(() {
+                      metas.add(GoalItem(
+                        id: DateTime.now().millisecondsSinceEpoch.toString(),
+                        title: _goalTitleCtrl.text,
+                        targetAmount: target,
+                      ));
+                    });
+                    _saveData();
+                    _goalTitleCtrl.clear();
+                    _goalTargetCtrl.clear();
+                  }
+                },
+              )
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          Expanded(
+            child: metas.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.savings_outlined, size: 48, color: Colors.grey),
+                        SizedBox(height: 12),
+                        Text('Nenhuma meta ou caixinha criada ainda.', style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: metas.length,
+                    itemBuilder: (ctx, i) {
+                      var item = metas[i];
+                      double pct = item.targetAmount > 0 ? (item.currentAmount / item.targetAmount).clamp(0.0, 1.0) : 0.0;
+
+                      return Card(
+                        color: const Color(0xFF151821),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                    onPressed: () {
+                                      setState(() {
+                                        metas.removeAt(i);
+                                      });
+                                      _saveData();
+                                    },
+                                  )
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('Guardado: R\$ ${item.currentAmount.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFFCCFF00), fontWeight: FontWeight.bold)),
+                                  Text('Meta: R\$ ${item.targetAmount.toStringAsFixed(2)}', style: const TextStyle(color: Colors.grey)),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              LinearProgressIndicator(
+                                value: pct,
+                                backgroundColor: const Color(0xFF232734),
+                                color: const Color(0xFFCCFF00),
+                                minHeight: 8,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.redAccent,
+                                      side: const BorderSide(color: Colors.redAccent),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                    onPressed: () {
+                                      _showDepositDialog(i, isWithdrawal: true);
+                                    },
+                                    icon: const Icon(Icons.remove, size: 16),
+                                    label: const Text('Resgatar'),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFFCCFF00),
+                                      foregroundColor: Colors.black,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                    onPressed: () {
+                                      _showDepositDialog(i, isWithdrawal: false);
+                                    },
+                                    icon: const Icon(Icons.add, size: 16),
+                                    label: const Text('Guardar'),
+                                  ),
+                                ],
+                              )
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          )
+        ],
+      ),
+    );
+  }
+
+  void _showDepositDialog(int metaIndex, {required bool isWithdrawal}) {
+    TextEditingController amountCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF151821),
+        title: Text(isWithdrawal ? 'Resgatar da Caixinha' : 'Guardar na Caixinha'),
+        content: TextField(
+          controller: amountCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(hintText: 'Valor R\$'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFCCFF00), foregroundColor: Colors.black),
+            onPressed: () {
+              double v = double.tryParse(amountCtrl.text.replaceAll(',', '.')) ?? 0.0;
+              if (v > 0) {
+                setState(() {
+                  if (isWithdrawal) {
+                    metas[metaIndex].currentAmount = (metas[metaIndex].currentAmount - v).clamp(0.0, double.infinity);
+                    saldo += v;
+                  } else {
+                    metas[metaIndex].currentAmount += v;
+                    saldo -= v;
+                  }
+                });
+                _saveData();
+              }
+              Navigator.pop(ctx);
+            },
+            child: Text(isWithdrawal ? 'Confirmar Resgate' : 'Confirmar Depósito'),
+          )
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // ABA 4: CONTAS & DÍVIDAS A VENCER
+  // ===========================================================================
+  Widget _buildContasTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _billTitleCtrl,
+                  decoration: const InputDecoration(hintText: 'Conta (Ex: Água, Luz)...'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 90,
+                child: TextField(
+                  controller: _billAmountCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(hintText: 'R\$'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _billDateCtrl,
+                  readOnly: true,
+                  decoration: const InputDecoration(
+                    hintText: 'Selecione a data de vencimento...',
+                    suffixIcon: Icon(Icons.calendar_month, color: Color(0xFFCCFF00)),
+                  ),
+                  onTap: () async {
+                    DateTime? picked = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now(),
+                      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        _billDateCtrl.text = "${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}";
+                      });
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFCCFF00),
+                  padding: const EdgeInsets.all(12),
+                ),
+                icon: const Icon(Icons.add, color: Colors.black),
+                onPressed: () {
+                  if (_billTitleCtrl.text.isNotEmpty) {
+                    double val = double.tryParse(_billAmountCtrl.text.replaceAll(',', '.')) ?? 0.0;
+                    String dt = _billDateCtrl.text.isNotEmpty ? _billDateCtrl.text : 'Em breve';
+                    setState(() {
+                      contas.add(BillItem(
+                        id: DateTime.now().millisecondsSinceEpoch.toString(),
+                        title: _billTitleCtrl.text,
+                        amount: val,
+                        dueDate: dt,
+                      ));
+                    });
+                    _saveData();
+                    _billTitleCtrl.clear();
+                    _billAmountCtrl.clear();
+                    _billDateCtrl.clear();
+                  }
+                },
+              )
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: contas.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.event_busy, size: 48, color: Colors.grey),
+                        SizedBox(height: 12),
+                        Text('Nenhuma conta agendada a vencer.', style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: contas.length,
+                    itemBuilder: (ctx, i) {
+                      var item = contas[i];
+                      return Card(
+                        color: const Color(0xFF151821),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: ListTile(
+                          leading: IconButton(
+                            icon: Icon(
+                              item.isPaid ? Icons.check_circle : Icons.radio_button_unchecked,
+                              color: item.isPaid ? Colors.greenAccent : Colors.redAccent,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                bool nextState = !item.isPaid;
+                                contas[i] = BillItem(
+                                  id: item.id,
+                                  title: item.title,
+                                  amount: item.amount,
+                                  dueDate: item.dueDate,
+                                  isPaid: nextState,
+                                );
+                                if (nextState) {
+                                  saldo -= item.amount;
+                                  gastos += item.amount;
+                                } else {
+                                  saldo += item.amount;
+                                  gastos -= item.amount;
+                                }
+                              });
+                              _saveData();
+                            },
+                          ),
+                          title: Text(
+                            item.title,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              decoration: item.isPaid ? TextDecoration.lineThrough : null,
+                            ),
+                          ),
+                          subtitle: Text('Vence em: ${item.dueDate} • ${item.isPaid ? "🟢 Paga" : "🔴 A Vencer"}'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('R\$ ${item.amount.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: item.isPaid ? Colors.greenAccent : Colors.redAccent)),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                onPressed: () {
+                                  setState(() {
+                                    contas.removeAt(i);
+                                  });
+                                  _saveData();
+                                },
+                              )
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          )
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // ABA 5: CARTÃO & PARCELAS SIMULADAS
+  // ===========================================================================
+  Widget _buildCartaoTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('💳 Simulador & Gestão de Compras Parceladas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFCCFF00))),
+          const SizedBox(height: 4),
+          const Text('Acompanhe o impacto de compras parceladas nas faturas futuras.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+          const SizedBox(height: 16),
+
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: _instTitleCtrl,
+                  decoration: const InputDecoration(hintText: 'Item (ex: TV, Sofá)...'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _instTotalValCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(hintText: 'Total R\$'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 65,
+                child: TextField(
+                  controller: _instCountCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(hintText: 'x Parc.'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFCCFF00),
+                  padding: const EdgeInsets.all(12),
+                ),
+                icon: const Icon(Icons.add, color: Colors.black),
+                onPressed: () {
+                  if (_instTitleCtrl.text.isNotEmpty) {
+                    double tot = double.tryParse(_instTotalValCtrl.text.replaceAll(',', '.')) ?? 0.0;
+                    int cnt = int.tryParse(_instCountCtrl.text) ?? 1;
+                    setState(() {
+                      parcelamentos.add(InstallmentItem(
+                        id: DateTime.now().millisecondsSinceEpoch.toString(),
+                        title: _instTitleCtrl.text,
+                        totalAmount: tot,
+                        totalInstallments: cnt,
+                      ));
+                    });
+                    _saveData();
+                    _instTitleCtrl.clear();
+                    _instTotalValCtrl.clear();
+                    _instCountCtrl.clear();
+                  }
+                },
+              )
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          Expanded(
+            child: parcelamentos.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.credit_card_off_outlined, size: 48, color: Colors.grey),
+                        SizedBox(height: 12),
+                        Text('Nenhum parcelamento cadastrado.', style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: parcelamentos.length,
+                    itemBuilder: (ctx, i) {
+                      var item = parcelamentos[i];
+                      return Card(
+                        color: const Color(0xFF151821),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        child: ListTile(
+                          title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('Valor Parcela: R\$ ${item.monthlyValue.toStringAsFixed(2)}/mês (${item.paidInstallments}/${item.totalInstallments} pagas)'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('Total: R\$ ${item.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFCCFF00))),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                onPressed: () {
+                                  setState(() {
+                                    parcelamentos.removeAt(i);
+                                  });
+                                  _saveData();
+                                },
+                              )
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          )
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // ABA 6: COMPRAS COM SOMA AUTOMÁTICA
   // ===========================================================================
   Widget _buildComprasTab() {
     double totalCompras = compras.fold(0.0, (sum, item) => sum + item.price);
@@ -1248,16 +1895,17 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                 : ListView.builder(
                     itemCount: compras.length,
                     itemBuilder: (ctx, i) {
+                      var item = compras[i];
                       return Card(
                         color: const Color(0xFF151821),
                         margin: const EdgeInsets.only(bottom: 8),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         child: ListTile(
-                          title: Text(compras[i].name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text('R\$ ${compras[i].price.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFCCFF00))),
+                              Text('R\$ ${item.price.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFCCFF00))),
                               const SizedBox(width: 8),
                               IconButton(
                                 icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
@@ -1281,137 +1929,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   }
 
   // ===========================================================================
-  // ABA 4: CONTAS A VENCER COM SELETOR DE DATA
-  // ===========================================================================
-  Widget _buildContasTab() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _billTitleCtrl,
-                  decoration: const InputDecoration(hintText: 'Conta (Ex: Água, Luz)...'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 90,
-                child: TextField(
-                  controller: _billAmountCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(hintText: 'R\$'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _billDateCtrl,
-                  readOnly: true,
-                  decoration: const InputDecoration(
-                    hintText: 'Selecione a data de vencimento...',
-                    suffixIcon: Icon(Icons.calendar_month, color: Color(0xFFCCFF00)),
-                  ),
-                  onTap: () async {
-                    DateTime? picked = await showDatePicker(
-                      context: context,
-                      initialDate: DateTime.now(),
-                      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                    );
-                    if (picked != null) {
-                      setState(() {
-                        _billDateCtrl.text = "${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}";
-                      });
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xFFCCFF00),
-                  padding: const EdgeInsets.all(12),
-                ),
-                icon: const Icon(Icons.add, color: Colors.black),
-                onPressed: () {
-                  if (_billTitleCtrl.text.isNotEmpty) {
-                    double val = double.tryParse(_billAmountCtrl.text.replaceAll(',', '.')) ?? 0.0;
-                    String dt = _billDateCtrl.text.isNotEmpty ? _billDateCtrl.text : 'Em breve';
-                    setState(() {
-                      contas.add(BillItem(
-                        id: DateTime.now().millisecondsSinceEpoch.toString(),
-                        title: _billTitleCtrl.text,
-                        amount: val,
-                        dueDate: dt,
-                      ));
-                    });
-                    _saveData();
-                    _billTitleCtrl.clear();
-                    _billAmountCtrl.clear();
-                    _billDateCtrl.clear();
-                  }
-                },
-              )
-            ],
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: contas.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(Icons.event_busy, size: 48, color: Colors.grey),
-                        SizedBox(height: 12),
-                        Text('Nenhuma conta agendada a vencer.', style: TextStyle(color: Colors.grey)),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: contas.length,
-                    itemBuilder: (ctx, i) {
-                      return Card(
-                        color: const Color(0xFF151821),
-                        margin: const EdgeInsets.only(bottom: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        child: ListTile(
-                          title: Text(contas[i].title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('Vence em: ${contas[i].dueDate}'),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text('R\$ ${contas[i].amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                                onPressed: () {
-                                  setState(() {
-                                    contas.removeAt(i);
-                                  });
-                                  _saveData();
-                                },
-                              )
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          )
-        ],
-      ),
-    );
-  }
-
-  // ===========================================================================
-  // ABA 5: MÓDULO MUDANÇA (SIMULADOR, CALCULADORA, CUSTOS E CRONOGRAMA)
+  // ABA 7: MÓDULO MUDANÇA (SIMULADOR, CALCULADORA, CUSTOS E CRONOGRAMA)
   // ===========================================================================
   Widget _buildMudancaTab() {
     double custoFixoMensalEstimado = simAluguel + simLuzAgua + simInternet + simTransporte + simIptu;
@@ -1794,7 +2312,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   }
 
   // ===========================================================================
-  // ABA 6: JÁ POSSUO (INVENTÁRIO)
+  // ABA 8: JÁ POSSUO (INVENTÁRIO)
   // ===========================================================================
   Widget _buildPossuoTab() {
     return Padding(
