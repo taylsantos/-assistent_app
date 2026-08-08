@@ -399,7 +399,6 @@ class MainHomeScreen extends StatefulWidget {
 class _MainHomeScreenState extends State<MainHomeScreen> {
   int _selectedTabIndex = 0; // 0: Chat, 1: Dashboard, 2: Atividades, 3: Metas, 4: Contas, 5: Cartão, 6: Compras, 7: Mudança, 8: Possuo
 
-  // SELEÇÃO DO TOM/PERSONALIDADE DA GIDEON
   String _selectedPersonality = 'acolhedor'; // 'acolhedor', 'sincero', 'motivador', 'executivo'
 
   // ESTADO FINANCEIRO
@@ -426,6 +425,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 
   // CONTROLLERS
   final TextEditingController _chatController = TextEditingController();
+  final TextEditingController _ofxImportCtrl = TextEditingController();
   final TextEditingController _groceryNameCtrl = TextEditingController();
   final TextEditingController _groceryPriceCtrl = TextEditingController();
   final TextEditingController _billTitleCtrl = TextEditingController();
@@ -436,35 +436,26 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   final TextEditingController _moveExpenseTitleCtrl = TextEditingController();
   final TextEditingController _moveExpenseValCtrl = TextEditingController();
 
-  // PROs CONTROLLERS
   final TextEditingController _proServiceCtrl = TextEditingController();
   final TextEditingController _proNameCtrl = TextEditingController();
   final TextEditingController _proAmountCtrl = TextEditingController();
 
-  // METAS E PARCELAS CONTROLLERS
   final TextEditingController _goalTitleCtrl = TextEditingController();
   final TextEditingController _goalTargetCtrl = TextEditingController();
   final TextEditingController _instTitleCtrl = TextEditingController();
   final TextEditingController _instTotalValCtrl = TextEditingController();
   final TextEditingController _instCountCtrl = TextEditingController();
 
-  // SIMULADOR CONTROLLERS
   final TextEditingController _simAluguelCtrl = TextEditingController();
   final TextEditingController _simLuzAguaCtrl = TextEditingController();
   final TextEditingController _simInternetCtrl = TextEditingController();
   final TextEditingController _simTransporteCtrl = TextEditingController();
   final TextEditingController _simIptuCtrl = TextEditingController();
 
-  // CALCULADORA EMBUTIDA
-  String _calcDisplay = '0';
-  double _calcFirstNum = 0.0;
-  String _calcOperator = '';
-  bool _calcResetNext = false;
-
   final List<Map<String, String>> messages = [
     {
       'sender': 'bot',
-      'text': 'Olá! Sou a Gideon. Selecione o meu modo de personalidade acima e me diga seus gastos e ganhos! 💕'
+      'text': 'Olá! Sou a Gideon. Selecione o meu modo de personalidade acima ou use a nova ferramenta no Dashboard para importar extratos do banco em OFX/CSV! 💕'
     }
   ];
 
@@ -492,6 +483,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   @override
   void dispose() {
     _chatController.dispose();
+    _ofxImportCtrl.dispose();
     _groceryNameCtrl.dispose();
     _groceryPriceCtrl.dispose();
     _billTitleCtrl.dispose();
@@ -669,6 +661,190 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             child: const Text('Zerar Tudo', style: TextStyle(color: Colors.white)),
           ),
         ],
+      ),
+    );
+  }
+
+  /// ============================================================================
+  /// IMPORTADOR E PARSER INTELIGENTE DE EXTRATO BANCÁRIO (OFX / CSV)
+  /// ============================================================================
+  void _showOfxImportModal() {
+    Color primaryColor = Theme.of(context).primaryColor;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          top: 24,
+          left: 20,
+          right: 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('🏦 Importar Extrato Bancário', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryColor)),
+                IconButton(icon: const Icon(Icons.close, color: Colors.grey), onPressed: () => Navigator.pop(ctx)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Cole o conteúdo do seu arquivo .OFX ou .CSV exportado do seu banco (Nubank, Itaú, Bradesco, Inter, Santander, etc.):',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _ofxImportCtrl,
+              maxLines: 8,
+              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+              decoration: const InputDecoration(
+                hintText: '<STMTTRN>\n<TRNTYPE>DEBIT\n<TRNAMT>-45.00\n<MEMO>iFood\nOU linhas em CSV (Data;Descrição;Valor)',
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.auto_fix_high, size: 20),
+                label: const Text('Processar e Ler Transações', style: TextStyle(fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  String text = _ofxImportCtrl.text.trim();
+                  if (text.isNotEmpty) {
+                    _processOfxOrCsvText(text);
+                    _ofxImportCtrl.clear();
+                    Navigator.pop(ctx);
+                  }
+                },
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _processOfxOrCsvText(String rawText) {
+    int importedCount = 0;
+    double addedBalance = 0.0;
+    double addedExpense = 0.0;
+
+    DateTime now = DateTime.now();
+    String todayStr = "${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}";
+
+    // PARSER OFX
+    if (rawText.contains('<STMTTRN>') || rawText.contains('<TRNAMT>')) {
+      List<String> trnBlocks = rawText.split('<STMTTRN>');
+      for (var block in trnBlocks) {
+        if (!block.contains('<TRNAMT>')) continue;
+
+        double amt = 0.0;
+        RegExp amtRegex = RegExp(r'<TRNAMT>\s*([-+]?\d+([.,]\d+)?)');
+        var amtMatch = amtRegex.firstMatch(block);
+        if (amtMatch != null) {
+          amt = double.tryParse(amtMatch.group(1)!.replaceAll(',', '.')) ?? 0.0;
+        }
+
+        String memo = 'Transação Banco';
+        RegExp memoRegex = RegExp(r'<(MEMO|NAME)>\s*([^\r\n<]+)');
+        var memoMatch = memoRegex.firstMatch(block);
+        if (memoMatch != null) {
+          memo = memoMatch.group(2)!.trim();
+        }
+
+        if (amt != 0) {
+          String category = _detectCategory(memo.toLowerCase());
+          setState(() {
+            if (amt < 0) {
+              double posVal = amt.abs();
+              gastos += posVal;
+              saldo -= posVal;
+              addedExpense += posVal;
+            } else {
+              saldo += amt;
+              addedBalance += amt;
+            }
+            transacoes.insert(
+              0,
+              TransactionItem(
+                id: DateTime.now().millisecondsSinceEpoch.toString() + importedCount.toString(),
+                title: memo,
+                value: amt,
+                category: amt > 0 ? 'Renda' : category,
+                date: todayStr,
+              ),
+            );
+          });
+          importedCount++;
+        }
+      }
+    } else {
+      // PARSER CSV
+      List<String> lines = rawText.split('\n');
+      for (var line in lines) {
+        if (line.trim().isEmpty) continue;
+        List<String> parts = line.split(RegExp(r'[;,]'));
+        if (parts.length < 2) continue;
+
+        double foundVal = 0.0;
+        String desc = '';
+
+        for (var part in parts) {
+          String cleanPart = part.replaceAll('R\$', '').replaceAll(' ', '').trim();
+          double? parsed = double.tryParse(cleanPart.replaceAll(',', '.'));
+          if (parsed != null && parsed != 0) {
+            foundVal = parsed;
+          } else if (part.trim().length > 2 && !part.contains('/')) {
+            desc = part.trim();
+          }
+        }
+
+        if (foundVal != 0) {
+          if (desc.isEmpty) desc = 'Lançamento CSV';
+          String category = _detectCategory(desc.toLowerCase());
+          setState(() {
+            if (foundVal < 0) {
+              double posVal = foundVal.abs();
+              gastos += posVal;
+              saldo -= posVal;
+              addedExpense += posVal;
+            } else {
+              saldo += foundVal;
+              addedBalance += foundVal;
+            }
+            transacoes.insert(
+              0,
+              TransactionItem(
+                id: DateTime.now().millisecondsSinceEpoch.toString() + importedCount.toString(),
+                title: desc,
+                value: foundVal,
+                category: foundVal > 0 ? 'Renda' : category,
+                date: todayStr,
+              ),
+            );
+          });
+          importedCount++;
+        }
+      }
+    }
+
+    _saveData();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('🎉 $importedCount transações importadas com sucesso!'),
+        backgroundColor: Theme.of(context).primaryColor,
       ),
     );
   }
@@ -1020,7 +1196,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 
     return Column(
       children: [
-        // BARRA DE SELEÇÃO DO TOM/PERSONALIDADE DA GIDEON
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
@@ -1137,6 +1312,42 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // BOTÃO DE IMPORTAÇÃO DE EXTRATO BANCÁRIO (OFX/CSV)
+          InkWell(
+            onTap: _showOfxImportModal,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: primaryColor.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: primaryColor, width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: primaryColor,
+                    radius: 18,
+                    child: const Icon(Icons.account_balance, color: Colors.black, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text('Importar Extrato Bancário (OFX / CSV)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        SizedBox(height: 2),
+                        Text('Conecte os lançamentos do seu banco em 1 clique', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.arrow_forward_ios, size: 14, color: primaryColor),
+                ],
+              ),
+            ),
+          ),
+
           Row(
             children: [
               Expanded(
